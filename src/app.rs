@@ -12,7 +12,6 @@ pub struct App {
     compute_bind_group: wgpu::BindGroup,
     copy_pipeline: wgpu::RenderPipeline,
     copy_bind_group: wgpu::BindGroup,
-    config_buffer: wgpu::Buffer,
     window: Window,
 }
 
@@ -85,28 +84,16 @@ impl App {
         let compute_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: None,
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::StorageTexture {
+                        access: wgpu::StorageTextureAccess::WriteOnly,
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        view_dimension: wgpu::TextureViewDimension::D2,
                     },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::StorageTexture {
-                            access: wgpu::StorageTextureAccess::WriteOnly,
-                            format: wgpu::TextureFormat::Rgba8Unorm,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                        },
-                        count: None,
-                    },
-                ],
+                    count: None,
+                }],
             });
 
         let output_texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -125,25 +112,13 @@ impl App {
         });
         let view = output_texture.create_view(&TextureViewDescriptor::default());
 
-        let config_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&[window_size.width, window_size.height]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
         let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &compute_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: config_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&view),
-                },
-            ],
+            entries: &[wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(&view),
+            }],
         });
 
         let compute_pipeline_layout =
@@ -241,18 +216,11 @@ impl App {
             copy_bind_group,
             compute_pipeline,
             compute_bind_group,
-            config_buffer,
             window,
         }
     }
 
-    pub fn update(&mut self) {
-        self.queue.write_buffer(
-            &self.config_buffer,
-            0,
-            bytemuck::cast_slice(&[self.window_size.width, self.window_size.height]),
-        );
-    }
+    pub fn update(&mut self) {}
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
