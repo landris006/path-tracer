@@ -13,6 +13,7 @@ pub struct App {
     copy_pipeline: wgpu::RenderPipeline,
     copy_bind_group: wgpu::BindGroup,
     window: Window,
+    last_frame_time: std::time::Instant,
 }
 
 impl App {
@@ -216,11 +217,17 @@ impl App {
             copy_bind_group,
             compute_pipeline,
             compute_bind_group,
+            last_frame_time: std::time::Instant::now(),
             window,
         }
     }
 
-    pub fn update(&mut self) {}
+    pub fn update(&mut self) {
+        let now = std::time::Instant::now();
+        let delta = now - self.last_frame_time;
+        dbg!(delta);
+        self.last_frame_time = now;
+    }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;

@@ -1,15 +1,17 @@
+use std::time::Instant;
+
 use winit::{
     dpi::LogicalSize,
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder,
+    window::{CursorGrabMode, WindowBuilder},
 };
 
 use crate::app::App;
 mod app;
 
 const WINDOW_WIDTH: u32 = 800;
-const WINDOW_HEIGHT: u32 = 600;
+const WINDOW_HEIGHT: u32 = 608;
 
 pub async fn run() {
     env_logger::init();
@@ -28,8 +30,14 @@ pub async fn run() {
             app.update();
             match app.render() {
                 Ok(_) => {}
-                Err(wgpu::SurfaceError::Lost) => app.resize(app.window_size()),
-                Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                Err(wgpu::SurfaceError::Lost) => {
+                    eprintln!("Lost surface, resizing");
+                    app.resize(app.window_size());
+                }
+                Err(wgpu::SurfaceError::OutOfMemory) => {
+                    eprintln!("Out of memory, exiting");
+                    *control_flow = ControlFlow::Exit;
+                }
                 Err(e) => eprintln!("{:?}", e),
             }
         }
@@ -49,7 +57,6 @@ pub async fn run() {
                     WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
                         app.resize(**new_inner_size);
                     }
-
                     WindowEvent::CloseRequested
                     | WindowEvent::KeyboardInput {
                         input:
