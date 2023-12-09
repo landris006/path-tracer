@@ -1,8 +1,14 @@
+use std::{
+    path::Path,
+    time::{Duration, Instant},
+};
+
 use wgpu::{include_wgsl, util::DeviceExt, Extent3d, SamplerBindingType, TextureViewDescriptor};
 use winit::{event::WindowEvent, window::Window};
 
 #[derive(Debug)]
 pub struct App {
+    start_time: Instant,
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -12,8 +18,16 @@ pub struct App {
     compute_bind_group: wgpu::BindGroup,
     copy_pipeline: wgpu::RenderPipeline,
     copy_bind_group: wgpu::BindGroup,
+    time_buffer: wgpu::Buffer,
     window: Window,
     last_frame_time: std::time::Instant,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct Sphere {
+    center: [f32; 3],
+    radius: f32,
 }
 
 impl App {
@@ -80,21 +94,47 @@ impl App {
         };
         surface.configure(&device, &config);
 
-        let compute_shader = device.create_shader_module(include_wgsl!("../shaders/compute.wgsl"));
+        let src = load_shader_source(Path::new("shaders"), "compute.wgsl").unwrap();
+        let compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("compute"),
+            source: wgpu::ShaderSource::Wgsl(src.into()),
+        });
 
         let compute_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: None,
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::StorageTexture {
-                        access: wgpu::StorageTextureAccess::WriteOnly,
-                        format: wgpu::TextureFormat::Rgba8Unorm,
-                        view_dimension: wgpu::TextureViewDimension::D2,
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::StorageTexture {
+                            access: wgpu::StorageTextureAccess::WriteOnly,
+                            format: wgpu::TextureFormat::Rgba8Unorm,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                        },
+                        count: None,
                     },
-                    count: None,
-                }],
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
             });
 
         let output_texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -113,13 +153,47 @@ impl App {
         });
         let view = output_texture.create_view(&TextureViewDescriptor::default());
 
+        let spheres = vec![
+            Sphere {
+                center: [0.0, 0.0, -1.0],
+                radius: 0.5,
+            },
+            Sphere {
+                center: [0.0, -100.5, -1.0],
+                radius: 100.0,
+            },
+        ];
+
+        let sphere_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&spheres),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+
+        let time_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            // TODO:
+            contents: bytemuck::cast_slice(&[Instant::now().elapsed().as_millis()]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
         let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &compute_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::TextureView(&view),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: sphere_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: time_buffer.as_entire_binding(),
+                },
+            ],
         });
 
         let compute_pipeline_layout =
@@ -135,7 +209,12 @@ impl App {
             entry_point: "main",
         });
 
-        let copy_shader = device.create_shader_module(include_wgsl!("../shaders/copy.wgsl"));
+        let src = load_shader_source(Path::new("shaders"), "copy.wgsl").unwrap();
+        let copy_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("copy"),
+            source: wgpu::ShaderSource::Wgsl(src.into()),
+        });
+
         let copy_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: None,
@@ -217,7 +296,9 @@ impl App {
             copy_bind_group,
             compute_pipeline,
             compute_bind_group,
-            last_frame_time: std::time::Instant::now(),
+            last_frame_time: Instant::now(),
+            time_buffer,
+            start_time: Instant::now(),
             window,
         }
     }
@@ -225,8 +306,14 @@ impl App {
     pub fn update(&mut self) {
         let now = std::time::Instant::now();
         let delta = now - self.last_frame_time;
-        dbg!(delta);
         self.last_frame_time = now;
+        dbg!(delta);
+
+        self.queue.write_buffer(
+            &self.time_buffer,
+            0,
+            bytemuck::cast_slice(&[self.start_time.elapsed().as_secs_f32()]),
+        );
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -292,7 +379,29 @@ impl App {
         }
     }
 
-    pub fn input(&mut self, event: &WindowEvent) -> bool {
+    pub fn input(&mut self, _event: &WindowEvent) -> bool {
         false
     }
+}
+
+fn load_shader_source(shaders_root: &Path, name: &str) -> Result<String, std::io::Error> {
+    let path = std::path::Path::new(shaders_root).join(name);
+    let src = std::fs::read_to_string(path)?
+        .lines()
+        .map(|line| {
+            if line.starts_with("//!include") {
+                let path = line
+                    .split_whitespace()
+                    .nth(1)
+                    .expect("invalid include statement")
+                    .replace('"', "");
+                load_shader_source(&Path::new(shaders_root).join("include"), &path)
+            } else {
+                Ok(line.to_owned())
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .join("\n");
+
+    Ok(src)
 }

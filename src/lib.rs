@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use winit::{
     dpi::LogicalSize,
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -10,8 +8,8 @@ use winit::{
 use crate::app::App;
 mod app;
 
-const WINDOW_WIDTH: u32 = 800;
-const WINDOW_HEIGHT: u32 = 608;
+const WINDOW_WIDTH: u32 = 1920;
+const WINDOW_HEIGHT: u32 = 1080;
 
 pub async fn run() {
     env_logger::init();
@@ -19,8 +17,15 @@ pub async fn run() {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_inner_size(LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT))
-        .with_resizable(false)
         .build(&event_loop)
+        .unwrap();
+
+    window.set_cursor_grab(CursorGrabMode::Locked).unwrap();
+    window
+        .set_cursor_position(winit::dpi::PhysicalPosition::new(
+            WINDOW_WIDTH as f64 / 2.0,
+            WINDOW_HEIGHT as f64 / 2.0,
+        ))
         .unwrap();
 
     let mut app = App::new(window).await;
