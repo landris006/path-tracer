@@ -20,13 +20,7 @@ pub async fn run() {
         .build(&event_loop)
         .unwrap();
 
-    window.set_cursor_grab(CursorGrabMode::Locked).unwrap();
-    window
-        .set_cursor_position(winit::dpi::PhysicalPosition::new(
-            WINDOW_WIDTH as f64 / 2.0,
-            WINDOW_HEIGHT as f64 / 2.0,
-        ))
-        .unwrap();
+    window.set_cursor_grab(CursorGrabMode::Confined).unwrap();
 
     let mut app = App::new(window).await;
 
