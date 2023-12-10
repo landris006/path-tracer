@@ -1,9 +1,6 @@
-use std::{
-    path::Path,
-    time::{Duration, Instant},
-};
+use std::{path::Path, time::Instant};
 
-use wgpu::{include_wgsl, util::DeviceExt, Extent3d, SamplerBindingType, TextureViewDescriptor};
+use wgpu::{util::DeviceExt, Extent3d, SamplerBindingType, TextureViewDescriptor};
 use winit::{event::WindowEvent, window::Window};
 
 #[derive(Debug)]
@@ -28,6 +25,8 @@ pub struct App {
 struct Sphere {
     center: [f32; 3],
     radius: f32,
+    albedo: [f32; 3],
+    _padding: u32,
 }
 
 impl App {
@@ -157,10 +156,14 @@ impl App {
             Sphere {
                 center: [0.0, 0.0, -1.0],
                 radius: 0.5,
+                albedo: [0.8, 0.3, 0.3],
+                _padding: 0,
             },
             Sphere {
                 center: [0.0, -100.5, -1.0],
                 radius: 100.0,
+                albedo: [0.8, 0.8, 0.0],
+                _padding: 0,
             },
         ];
 

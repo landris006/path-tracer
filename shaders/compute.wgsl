@@ -8,15 +8,17 @@ struct Ray {
 struct Sphere {
   center: vec3<f32>,
   radius: f32,
+  albedo: vec3<f32>,
+  _padding: f32,
 }
 
 struct HitRecord {
     hit: bool,
     t: f32,
     p: vec3<f32>,
-    color: vec3<f32>,
     normal: vec3<f32>,
     frontFace: bool,
+    attenuation: vec3<f32>,
 }
 
 @group(0) @binding(0) var outputTex: texture_storage_2d<rgba8unorm, write>;
@@ -85,9 +87,10 @@ fn rayColor(initialRay: Ray) -> vec3<f32> {
             break;
         }
 
-        let bounceDir: vec3<f32> = randomUnit(hitRecord.p.xy) + hitRecord.normal;
+        var bounceDir: vec3<f32> = reflect(currentRay.direction, hitRecord.normal);
+
         currentRay = Ray(hitRecord.p, bounceDir);
-        color = color * 0.5;
+        color = color * hitRecord.attenuation;
     }
 
     return color * getBackgroundColor(currentRay);
@@ -100,7 +103,14 @@ fn getBackgroundColor(ray: Ray) -> vec3<f32> {
 }
 
 fn hitScene(ray: Ray) -> HitRecord {
-    var hitRecord: HitRecord = HitRecord(false, 0.0, vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 0.0), false);
+    var hitRecord: HitRecord = HitRecord(
+        false,
+        0.0,
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.0, 0.0, 0.0),
+        false,
+        vec3<f32>(0.0, 0.0, 0.0)
+    );
 
     for (var i = 0u; i < arrayLength(&spheres); i = i + 1u) {
         let sphere = spheres[i];
@@ -121,7 +131,7 @@ fn hitSphere(ray: Ray, sphere: Sphere) -> HitRecord {
     let c: f32 = dot(centerToRayOrigin, centerToRayOrigin) - sphere.radius * sphere.radius;
     let discriminant: f32 = b * b - 4.0 * a * c;
 
-    var hitRecord: HitRecord = HitRecord(false, 0.0, vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 0.0), false);
+    var hitRecord: HitRecord = HitRecord(false, 0.0, vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 0.0), false, vec3<f32>(0.0, 0.0, 0.0));
 
     if discriminant < 0.0 {
         return hitRecord;
@@ -144,6 +154,21 @@ fn hitSphere(ray: Ray, sphere: Sphere) -> HitRecord {
     let outwardNormal: vec3<f32> = (hitRecord.p - sphere.center) / sphere.radius;
     hitRecord.frontFace = dot(ray.direction, outwardNormal) < 0.0;
     hitRecord.normal = select(-outwardNormal, outwardNormal, hitRecord.frontFace);
+    hitRecord.attenuation = sphere.albedo;
 
     return hitRecord;
+}
+
+fn scatter(dir: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
+    var scatterDirection: vec3<f32> = normal + randomUnit(dir.xy);
+
+    if dot(scatterDirection, scatterDirection) < 0.001 {
+        scatterDirection = normal;
+    }
+
+    return scatterDirection;
+}
+
+fn reflect(dir: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
+    return dir - 2.0 * dot(dir, normal) * normal;
 }
