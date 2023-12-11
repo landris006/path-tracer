@@ -11,3 +11,7 @@ winit = "0.28"
 env_logger = "0.10.1"
 bytemuck = { version = "1.14.0", features = ["derive"] }
 cgmath = "0.18.0"
+egui = "0.23"
+egui_wgpu_backend = "0.27.0"
+egui_winit_platform = "0.20.0"
+epi = "0.17.0"

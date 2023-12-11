@@ -54,7 +54,7 @@ impl CameraController {
             is_pressing_backward: false,
             is_pressing_left: false,
             is_pressing_right: false,
-            speed: 0.1,
+            speed: 0.8,
         }
     }
 

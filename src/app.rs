@@ -1,16 +1,20 @@
-use std::{path::Path, time::Instant};
+use std::{cell::RefCell, path::Path, time::Instant};
 
 use cgmath::Vector3;
+use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
+use egui_winit_platform::{Platform, PlatformDescriptor};
 use wgpu::{util::DeviceExt, Extent3d, SamplerBindingType, TextureViewDescriptor};
-use winit::{event::WindowEvent, window::Window};
+use winit::{
+    event::{Event, WindowEvent},
+    window::Window,
+};
 
 use crate::{
     camera::{Camera, CameraBuffer, CameraController},
     scene::{Sphere, SphereBuffer},
-    WINDOW_HEIGHT, WINDOW_WIDTH,
+    CustomEvent, WINDOW_HEIGHT, WINDOW_WIDTH,
 };
 
-#[derive(Debug)]
 pub struct App {
     start_time: Instant,
     surface: wgpu::Surface,
@@ -27,6 +31,9 @@ pub struct App {
     camera: Camera,
     camera_controller: CameraController,
     camera_buffer: wgpu::Buffer,
+    platform: RefCell<Platform>,
+    egui_rpass: RenderPass,
+    fps: f32,
     window: Window,
 }
 
@@ -93,6 +100,16 @@ impl App {
             view_formats: vec![],
         };
         surface.configure(&device, &config);
+
+        let platform = Platform::new(PlatformDescriptor {
+            physical_width: window_size.width,
+            physical_height: window_size.height,
+            scale_factor: window.scale_factor(),
+            ..Default::default()
+        });
+
+        // We use the egui_wgpu_backend crate as the render backend.
+        let egui_rpass = RenderPass::new(&device, surface_format, 1);
 
         let src = load_shader_source(Path::new("shaders"), "compute.wgsl").unwrap();
         let compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -332,6 +349,9 @@ impl App {
             camera,
             camera_controller: CameraController::new(),
             camera_buffer,
+            platform: RefCell::new(platform),
+            egui_rpass,
+            fps: 0.0,
             window,
         }
     }
@@ -340,6 +360,7 @@ impl App {
         let now = std::time::Instant::now();
         let delta = now - self.last_frame_time;
         self.last_frame_time = now;
+        self.fps = 1.0 / delta.as_secs_f32();
         dbg!(delta);
 
         self.camera_controller
@@ -405,8 +426,47 @@ impl App {
 
         drop(render_pass);
 
+        let mut platform = self.platform.borrow_mut();
+
+        platform.update_time(self.start_time.elapsed().as_secs_f64());
+
+        platform.begin_frame();
+
+        // TODO:
+        egui::Window::new("Settings").show(&platform.context(), |ui| {
+            ui.add(egui::Label::new(format!("FPS: {}", self.fps)));
+            ui.add(
+                egui::Slider::new(&mut self.camera_controller.speed, 0.0..=5.0)
+                    .text("Camera speed"),
+            );
+        });
+
+        let full_output = platform.end_frame(Some(self.window()));
+        let paint_jobs = platform.context().tessellate(full_output.shapes);
+
+        let screen_descriptor = ScreenDescriptor {
+            physical_width: self.window_size.width,
+            physical_height: self.window_size.height,
+            scale_factor: self.window.scale_factor() as f32,
+        };
+        let tdelta: egui::TexturesDelta = full_output.textures_delta;
+        self.egui_rpass
+            .add_textures(&self.device, &self.queue, &tdelta)
+            .expect("add texture ok");
+        self.egui_rpass
+            .update_buffers(&self.device, &self.queue, &paint_jobs, &screen_descriptor);
+
+        // Record all render passes.
+        self.egui_rpass
+            .execute(&mut encoder, &view, &paint_jobs, &screen_descriptor, None)
+            .unwrap();
+
         self.queue.submit(Some(encoder.finish()));
         output.present();
+
+        self.egui_rpass
+            .remove_textures(tdelta)
+            .expect("remove texture ok");
 
         Ok(())
     }
@@ -425,6 +485,10 @@ impl App {
 
     pub fn input(&mut self, event: &WindowEvent) {
         self.camera_controller.input(event);
+    }
+
+    pub fn ui_input(&mut self, event: &Event<CustomEvent>) {
+        self.platform.borrow_mut().handle_event(event);
     }
 }
 
