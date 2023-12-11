@@ -100,12 +100,20 @@ fn rayColor(initialRay: Ray) -> vec3<f32> {
 
         var bounceDir: vec3<f32>;
         switch (hitRecord.material) {
+            // Lambertian
             case 0u: {
                 bounceDir = scatter(currentRay.direction, hitRecord.normal);
+                if dot(bounceDir, hitRecord.normal) <= 0.0 {
+                    return color * hitRecord.attenuation;
+                }
                 break;
             }
+            // Metal
             case 1u: {
                 bounceDir = reflect(currentRay.direction, hitRecord.normal);
+                if dot(bounceDir, hitRecord.normal) <= 0.0 {
+                    return color * hitRecord.attenuation;
+                }
                 break;
             }
             default: {
@@ -175,7 +183,6 @@ fn hitSphere(ray: Ray, sphere: Sphere) -> HitRecord {
         return hitRecord;
     }
 
-
     var root = (-b - sqrt(discriminant)) / (2.0 * a);
     if root <= T_MIN || root >= T_MAX {
         root = (-b + sqrt(discriminant)) / (2.0 * a);
@@ -199,7 +206,7 @@ fn hitSphere(ray: Ray, sphere: Sphere) -> HitRecord {
 fn scatter(dir: vec3<f32 >, normal: vec3<f32>) -> vec3<f32> {
     var scatterDirection: vec3<f32> = normal + randomUnit(dir.xy);
 
-    if dot(scatterDirection, scatterDirection) < 0.001 {
+    if abs(scatterDirection.x) < 1e-8 && abs(scatterDirection.y) < 1e-8 && abs(scatterDirection.z) < 1e-8 {
         scatterDirection = normal;
     }
 
@@ -207,5 +214,8 @@ fn scatter(dir: vec3<f32 >, normal: vec3<f32>) -> vec3<f32> {
 }
 
 fn reflect(dir: vec3<f32 >, normal: vec3<f32>) -> vec3<f32> {
-    return dir - 2.0 * dot(dir, normal) * normal;
+    let reflected: vec3<f32> = normalize(dir - 2.0 * dot(dir, normal) * normal);
+    let fuzz: f32 = 0.2;
+
+    return reflected + fuzz * randomUnit(dir.xy) * dot(reflected, normal);
 }

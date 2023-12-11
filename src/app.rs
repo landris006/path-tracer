@@ -198,13 +198,13 @@ impl App {
                 center: Vector3::new(1.0, 0.0, -1.0),
                 radius: 0.5,
                 albedo: Vector3::new(0.8, 0.3, 0.3),
-                material: Material::Diffuse,
+                material: Material::Metal,
             },
             Sphere {
                 center: Vector3::new(-1.0, 0.0, -1.0),
                 radius: 0.5,
                 albedo: Vector3::new(0.8, 0.3, 0.3),
-                material: Material::Diffuse,
+                material: Material::Metal,
             },
             Sphere {
                 center: Vector3::new(0.0, 1.0, -1.0),
