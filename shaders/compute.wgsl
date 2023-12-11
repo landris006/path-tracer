@@ -12,6 +12,17 @@ struct Sphere {
   _padding: f32,
 }
 
+struct Camera {
+    origin: vec3<f32>,
+    focalLength: f32,
+    forward: vec3<f32>,
+    _padding: u32,
+    right: vec3<f32>,
+    _padding2: u32,
+    up: vec3<f32>,
+    _padding3: u32,
+}
+
 struct HitRecord {
     hit: bool,
     t: f32,
@@ -22,8 +33,9 @@ struct HitRecord {
 }
 
 @group(0) @binding(0) var outputTex: texture_storage_2d<rgba8unorm, write>;
-@group(0) @binding(1) var<storage, read> spheres: array<Sphere>;
-@group(0) @binding(2) var<uniform> time: f32;
+@group(0) @binding(1) var<uniform> camera: Camera;
+@group(0) @binding(2) var<storage, read> spheres: array<Sphere>;
+@group(0) @binding(3) var<uniform> time: f32;
 
 const T_MIN: f32 = 0.001;
 const T_MAX: f32 = 1000.0;
@@ -34,6 +46,10 @@ const SAMPLE_SIZE: u32 = 50u;
 fn main(@builtin(global_invocation_id) threadId: vec3<u32>) {
     let screen_size: vec2<u32> = vec2<u32>(textureDimensions(outputTex));
 
+    if threadId.x >= screen_size.x || threadId.y >= screen_size.y {
+        return;
+    }
+
     let aspectRatio: f32 = f32(screen_size.x) / f32(screen_size.y);
     let viewPortHeight: f32 = 2.0;
     let viewPortWidth: f32 = aspectRatio * viewPortHeight;
@@ -41,16 +57,10 @@ fn main(@builtin(global_invocation_id) threadId: vec3<u32>) {
     let viewPortU: vec3<f32> = vec3<f32>(viewPortWidth, 0.0, 0.0);
     let viewPortV: vec3<f32> = vec3<f32>(0.0, -viewPortHeight, 0.0);
 
-    let focalLength: f32 = 1.0;
-    let eye = vec3<f32>(0.0, 0.0, sin(time) + 1.0);
-    let forwards: vec3<f32> = vec3<f32>(0.0, 0.0, -1.0);
-    let right: vec3<f32> = vec3<f32>(1.0, 0.0, 0.0);
-    let up: vec3<f32> = vec3<f32>(0.0, 1.0, 0.0);
-
     let pixelDeltaU = viewPortU / f32(screen_size.x);
     let pixelDeltaV = viewPortV / f32(screen_size.y);
 
-    let upper_left: vec3<f32> = eye + focalLength * forwards - 0.5 * (viewPortU + viewPortV);
+    let upper_left: vec3<f32> = camera.origin + camera.focalLength * camera.forward - 0.5 * (viewPortU + viewPortV);
     let pixel00Location: vec3<f32> = upper_left + 0.5 * (pixelDeltaU + pixelDeltaV);
 
     let pixelLocation: vec3<f32> = pixel00Location + f32(threadId.x) * pixelDeltaU + f32(threadId.y) * pixelDeltaV;
@@ -58,12 +68,12 @@ fn main(@builtin(global_invocation_id) threadId: vec3<u32>) {
     var color: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
     for (var i = 0u; i < SAMPLE_SIZE; i = i + 1u) {
         let px = -0.5 + rand(pixelLocation.xy * f32(i));
-        let py = -0.5 + rand(pixelLocation.xy * px);
+        let py = -0.5 + rand(pixelLocation.yx * f32(i));
 
         let sample: vec3<f32> = pixelDeltaU * px + pixelDeltaV * py;
         let sampleLocation: vec3<f32> = pixelLocation + sample;
 
-        let ray: Ray = Ray(eye, sampleLocation - eye);
+        let ray: Ray = Ray(camera.origin, sampleLocation - camera.origin);
 
         color = color + rayColor(ray);
     }

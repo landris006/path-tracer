@@ -7,9 +7,11 @@ use winit::{
 
 use crate::app::App;
 mod app;
+mod camera;
+mod scene;
 
-const WINDOW_WIDTH: u32 = 1920;
-const WINDOW_HEIGHT: u32 = 1080;
+const WINDOW_WIDTH: u32 = 1000;
+const WINDOW_HEIGHT: u32 = 800;
 
 pub async fn run() {
     env_logger::init();
@@ -20,7 +22,8 @@ pub async fn run() {
         .build(&event_loop)
         .unwrap();
 
-    window.set_cursor_grab(CursorGrabMode::Confined).unwrap();
+    // window.set_cursor_grab(CursorGrabMode::Confined).unwrap();
+    // window.set_cursor_visible(false);
 
     let mut app = App::new(window).await;
 
@@ -48,26 +51,26 @@ pub async fn run() {
             ref event,
             window_id,
         } if window_id == app.window().id() => {
-            if !app.input(event) {
-                match event {
-                    WindowEvent::Resized(physical_size) => {
-                        app.resize(*physical_size);
-                    }
-                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        app.resize(**new_inner_size);
-                    }
-                    WindowEvent::CloseRequested
-                    | WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::Escape),
-                                ..
-                            },
-                        ..
-                    } => *control_flow = ControlFlow::Exit,
-                    _ => {}
+            app.input(event);
+
+            match event {
+                WindowEvent::Resized(physical_size) => {
+                    app.resize(*physical_size);
                 }
+                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                    app.resize(**new_inner_size);
+                }
+                WindowEvent::CloseRequested
+                | WindowEvent::KeyboardInput {
+                    input:
+                        KeyboardInput {
+                            state: ElementState::Pressed,
+                            virtual_keycode: Some(VirtualKeyCode::Escape),
+                            ..
+                        },
+                    ..
+                } => *control_flow = ControlFlow::Exit,
+                _ => {}
             }
         }
         _ => {}

@@ -1,7 +1,14 @@
 use std::{path::Path, time::Instant};
 
+use cgmath::Vector3;
 use wgpu::{util::DeviceExt, Extent3d, SamplerBindingType, TextureViewDescriptor};
 use winit::{event::WindowEvent, window::Window};
+
+use crate::{
+    camera::{Camera, CameraBuffer, CameraController},
+    scene::{Sphere, SphereBuffer},
+    WINDOW_HEIGHT, WINDOW_WIDTH,
+};
 
 #[derive(Debug)]
 pub struct App {
@@ -16,17 +23,11 @@ pub struct App {
     copy_pipeline: wgpu::RenderPipeline,
     copy_bind_group: wgpu::BindGroup,
     time_buffer: wgpu::Buffer,
-    window: Window,
     last_frame_time: std::time::Instant,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct Sphere {
-    center: [f32; 3],
-    radius: f32,
-    albedo: [f32; 3],
-    _padding: u32,
+    camera: Camera,
+    camera_controller: CameraController,
+    camera_buffer: wgpu::Buffer,
+    window: Window,
 }
 
 impl App {
@@ -117,7 +118,7 @@ impl App {
                         binding: 1,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
@@ -125,6 +126,16 @@ impl App {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
@@ -139,8 +150,8 @@ impl App {
         let output_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: None,
             size: Extent3d {
-                width: window_size.width,
-                height: window_size.height,
+                width: WINDOW_WIDTH,
+                height: WINDOW_HEIGHT,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -152,25 +163,37 @@ impl App {
         });
         let view = output_texture.create_view(&TextureViewDescriptor::default());
 
+        let camera = Camera {
+            origin: Vector3::new(0.0, 0.0, 0.0),
+            forward: Vector3::new(0.0, 0.0, -1.0),
+            up: Vector3::new(0.0, 1.0, 0.0),
+            right: Vector3::new(1.0, 0.0, 0.0),
+            focal_length: 1.0,
+        };
         let spheres = vec![
             Sphere {
-                center: [0.0, 0.0, -1.0],
+                center: Vector3::new(0.0, 0.0, -1.0),
                 radius: 0.5,
-                albedo: [0.8, 0.3, 0.3],
-                _padding: 0,
+                albedo: Vector3::new(0.8, 0.3, 0.3),
             },
             Sphere {
-                center: [0.0, -100.5, -1.0],
+                center: Vector3::new(0.0, -100.5, -1.0),
                 radius: 100.0,
-                albedo: [0.8, 0.8, 0.0],
-                _padding: 0,
+                albedo: Vector3::new(0.8, 0.8, 0.0),
             },
         ];
+        let sphere_buffer = spheres.iter().map(SphereBuffer::from).collect::<Vec<_>>();
 
         let sphere_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
-            contents: bytemuck::cast_slice(&spheres),
+            contents: bytemuck::cast_slice(&sphere_buffer),
             usage: wgpu::BufferUsages::STORAGE,
+        });
+
+        let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&[CameraBuffer::from(&camera)]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
         let time_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -190,10 +213,14 @@ impl App {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: sphere_buffer.as_entire_binding(),
+                    resource: camera_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
+                    resource: sphere_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
                     resource: time_buffer.as_entire_binding(),
                 },
             ],
@@ -227,7 +254,7 @@ impl App {
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Texture {
                             multisampled: false,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
                             view_dimension: wgpu::TextureViewDimension::D2,
                         },
                         count: None,
@@ -302,6 +329,9 @@ impl App {
             last_frame_time: Instant::now(),
             time_buffer,
             start_time: Instant::now(),
+            camera,
+            camera_controller: CameraController::new(),
+            camera_buffer,
             window,
         }
     }
@@ -312,10 +342,18 @@ impl App {
         self.last_frame_time = now;
         dbg!(delta);
 
+        self.camera_controller
+            .update_camera(&mut self.camera, delta.as_secs_f32());
+
         self.queue.write_buffer(
             &self.time_buffer,
             0,
             bytemuck::cast_slice(&[self.start_time.elapsed().as_secs_f32()]),
+        );
+        self.queue.write_buffer(
+            &self.camera_buffer,
+            0,
+            bytemuck::cast_slice(&[CameraBuffer::from(&self.camera)]),
         );
     }
 
@@ -373,6 +411,9 @@ impl App {
         Ok(())
     }
 
+    #[allow(dead_code)]
+    pub fn render_ui(&mut self) {}
+
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
             self.window_size = new_size;
@@ -382,8 +423,8 @@ impl App {
         }
     }
 
-    pub fn input(&mut self, _event: &WindowEvent) -> bool {
-        false
+    pub fn input(&mut self, event: &WindowEvent) {
+        self.camera_controller.input(event);
     }
 }
 
