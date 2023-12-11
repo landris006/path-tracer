@@ -3,8 +3,8 @@
 use winit::{
     dpi::LogicalSize,
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
-    event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
-    window::{CursorGrabMode, WindowBuilder},
+    event_loop::{ControlFlow, EventLoopBuilder},
+    window::WindowBuilder,
 };
 
 use crate::app::App;
@@ -35,6 +35,7 @@ pub async fn run() {
     let event_loop = EventLoopBuilder::<CustomEvent>::with_user_event().build();
     let window = WindowBuilder::new()
         .with_inner_size(LogicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT))
+        .with_title("Raytracer")
         .build(&event_loop)
         .unwrap();
 
@@ -49,6 +50,7 @@ pub async fn run() {
         match event {
             Event::RedrawRequested(window_id) if window_id == app.window().id() => {
                 app.update();
+                app.setup_ui();
 
                 match app.render() {
                     Ok(_) => {}

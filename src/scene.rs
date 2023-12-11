@@ -1,10 +1,18 @@
 use cgmath::Vector3;
 
 #[derive(Debug)]
+pub enum Material {
+    Diffuse,
+    Metal,
+    Dielectric,
+}
+
+#[derive(Debug)]
 pub struct Sphere {
     pub center: Vector3<f32>,
     pub radius: f32,
     pub albedo: Vector3<f32>,
+    pub material: Material,
 }
 
 #[repr(C)]
@@ -13,7 +21,7 @@ pub struct SphereBuffer {
     center: [f32; 3],
     radius: f32,
     albedo: [f32; 3],
-    _padding: u32,
+    material: u32,
 }
 impl From<&Sphere> for SphereBuffer {
     fn from(sphere: &Sphere) -> Self {
@@ -21,7 +29,11 @@ impl From<&Sphere> for SphereBuffer {
             center: sphere.center.into(),
             radius: sphere.radius,
             albedo: sphere.albedo.into(),
-            _padding: 0,
+            material: match sphere.material {
+                Material::Diffuse => 0,
+                Material::Metal => 1,
+                Material::Dielectric => 2,
+            },
         }
     }
 }

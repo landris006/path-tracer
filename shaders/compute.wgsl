@@ -9,7 +9,7 @@ struct Sphere {
   center: vec3<f32>,
   radius: f32,
   albedo: vec3<f32>,
-  _padding: f32,
+  material: u32,
 }
 
 struct Camera {
@@ -30,6 +30,7 @@ struct HitRecord {
     normal: vec3<f32>,
     frontFace: bool,
     attenuation: vec3<f32>,
+    material: u32,
 }
 
 @group(0) @binding(0) var outputTex: texture_storage_2d<rgba8unorm, write>;
@@ -39,8 +40,8 @@ struct HitRecord {
 
 const T_MIN: f32 = 0.001;
 const T_MAX: f32 = 1000.0;
-const MAX_DEPTH: u32 = 20u;
-const SAMPLE_SIZE: u32 = 50u;
+const MAX_DEPTH: u32 = 30u;
+const SAMPLE_SIZE: u32 = 30u;
 
 @compute @workgroup_size(16, 16)
 fn main(@builtin(global_invocation_id) threadId: vec3<u32>) {
@@ -68,7 +69,7 @@ fn main(@builtin(global_invocation_id) threadId: vec3<u32>) {
     var color: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
     for (var i = 0u; i < SAMPLE_SIZE; i = i + 1u) {
         let px = -0.5 + rand(pixelLocation.xy * f32(i));
-        let py = -0.5 + rand(pixelLocation.yx * f32(i));
+        let py = -0.5 + rand(pixelLocation.yx * f32(i) * px);
 
         let sample: vec3<f32> = pixelDeltaU * px + pixelDeltaV * py;
         let sampleLocation: vec3<f32> = pixelLocation + sample;
@@ -97,7 +98,21 @@ fn rayColor(initialRay: Ray) -> vec3<f32> {
             break;
         }
 
-        var bounceDir: vec3<f32> = reflect(currentRay.direction, hitRecord.normal);
+        var bounceDir: vec3<f32>;
+        switch (hitRecord.material) {
+            case 0u: {
+                bounceDir = scatter(currentRay.direction, hitRecord.normal);
+                break;
+            }
+            case 1u: {
+                bounceDir = reflect(currentRay.direction, hitRecord.normal);
+                break;
+            }
+            default: {
+                bounceDir = scatter(currentRay.direction, hitRecord.normal);
+                break;
+            }
+        }
 
         currentRay = Ray(hitRecord.p, bounceDir);
         color = color * hitRecord.attenuation;
@@ -119,14 +134,19 @@ fn hitScene(ray: Ray) -> HitRecord {
         vec3<f32>(0.0, 0.0, 0.0),
         vec3<f32>(0.0, 0.0, 0.0),
         false,
-        vec3<f32>(0.0, 0.0, 0.0)
+        vec3<f32>(0.0, 0.0, 0.0),
+        0u
     );
 
     for (var i = 0u; i < arrayLength(&spheres); i = i + 1u) {
         let sphere = spheres[i];
         let objectHitRecord = hitSphere(ray, sphere);
 
-        if objectHitRecord.hit && (!hitRecord.hit || objectHitRecord.t < hitRecord.t) {
+        if !objectHitRecord.hit {
+            continue;
+        }
+
+        if !hitRecord.hit || objectHitRecord.t < hitRecord.t {
             hitRecord = objectHitRecord;
         }
     }
@@ -141,7 +161,15 @@ fn hitSphere(ray: Ray, sphere: Sphere) -> HitRecord {
     let c: f32 = dot(centerToRayOrigin, centerToRayOrigin) - sphere.radius * sphere.radius;
     let discriminant: f32 = b * b - 4.0 * a * c;
 
-    var hitRecord: HitRecord = HitRecord(false, 0.0, vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 0.0), false, vec3<f32>(0.0, 0.0, 0.0));
+    var hitRecord: HitRecord = HitRecord(
+        false,
+        0.0,
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.0, 0.0, 0.0),
+        false,
+        sphere.albedo,
+        sphere.material
+    );
 
     if discriminant < 0.0 {
         return hitRecord;
@@ -164,12 +192,11 @@ fn hitSphere(ray: Ray, sphere: Sphere) -> HitRecord {
     let outwardNormal: vec3<f32> = (hitRecord.p - sphere.center) / sphere.radius;
     hitRecord.frontFace = dot(ray.direction, outwardNormal) < 0.0;
     hitRecord.normal = select(-outwardNormal, outwardNormal, hitRecord.frontFace);
-    hitRecord.attenuation = sphere.albedo;
 
     return hitRecord;
 }
 
-fn scatter(dir: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
+fn scatter(dir: vec3<f32 >, normal: vec3<f32>) -> vec3<f32> {
     var scatterDirection: vec3<f32> = normal + randomUnit(dir.xy);
 
     if dot(scatterDirection, scatterDirection) < 0.001 {
@@ -179,6 +206,6 @@ fn scatter(dir: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
     return scatterDirection;
 }
 
-fn reflect(dir: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
+fn reflect(dir: vec3<f32 >, normal: vec3<f32>) -> vec3<f32> {
     return dir - 2.0 * dot(dir, normal) * normal;
 }

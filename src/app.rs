@@ -11,7 +11,7 @@ use winit::{
 
 use crate::{
     camera::{Camera, CameraBuffer, CameraController},
-    scene::{Sphere, SphereBuffer},
+    scene::{Material, Sphere, SphereBuffer},
     CustomEvent, WINDOW_HEIGHT, WINDOW_WIDTH,
 };
 
@@ -33,7 +33,7 @@ pub struct App {
     camera_buffer: wgpu::Buffer,
     platform: RefCell<Platform>,
     egui_rpass: RenderPass,
-    fps: f32,
+    frame_times: Vec<f32>,
     window: Window,
 }
 
@@ -192,11 +192,37 @@ impl App {
                 center: Vector3::new(0.0, 0.0, -1.0),
                 radius: 0.5,
                 albedo: Vector3::new(0.8, 0.3, 0.3),
+                material: Material::Diffuse,
+            },
+            Sphere {
+                center: Vector3::new(1.0, 0.0, -1.0),
+                radius: 0.5,
+                albedo: Vector3::new(0.8, 0.3, 0.3),
+                material: Material::Diffuse,
+            },
+            Sphere {
+                center: Vector3::new(-1.0, 0.0, -1.0),
+                radius: 0.5,
+                albedo: Vector3::new(0.8, 0.3, 0.3),
+                material: Material::Diffuse,
+            },
+            Sphere {
+                center: Vector3::new(0.0, 1.0, -1.0),
+                radius: 0.5,
+                albedo: Vector3::new(0.8, 0.3, 0.3),
+                material: Material::Diffuse,
+            },
+            Sphere {
+                center: Vector3::new(0.0, 2.0, -1.0),
+                radius: 0.5,
+                albedo: Vector3::new(0.8, 0.3, 0.3),
+                material: Material::Metal,
             },
             Sphere {
                 center: Vector3::new(0.0, -100.5, -1.0),
                 radius: 100.0,
                 albedo: Vector3::new(0.8, 0.8, 0.0),
+                material: Material::Diffuse,
             },
         ];
         let sphere_buffer = spheres.iter().map(SphereBuffer::from).collect::<Vec<_>>();
@@ -351,7 +377,7 @@ impl App {
             camera_buffer,
             platform: RefCell::new(platform),
             egui_rpass,
-            fps: 0.0,
+            frame_times: Vec::new(),
             window,
         }
     }
@@ -360,8 +386,10 @@ impl App {
         let now = std::time::Instant::now();
         let delta = now - self.last_frame_time;
         self.last_frame_time = now;
-        self.fps = 1.0 / delta.as_secs_f32();
-        dbg!(delta);
+        self.frame_times.push(delta.as_secs_f32());
+        if self.frame_times.len() > 100 {
+            self.frame_times.remove(0);
+        }
 
         self.camera_controller
             .update_camera(&mut self.camera, delta.as_secs_f32());
@@ -376,6 +404,24 @@ impl App {
             0,
             bytemuck::cast_slice(&[CameraBuffer::from(&self.camera)]),
         );
+    }
+
+    pub fn setup_ui(&mut self) {
+        let mut platform = self.platform.borrow_mut();
+        platform.update_time(self.start_time.elapsed().as_secs_f64());
+        platform.begin_frame();
+
+        let avg_frame_time = self.frame_times.iter().sum::<f32>() / self.frame_times.len() as f32;
+
+        egui::Window::new("Settings")
+            .resizable(true)
+            .show(&platform.context(), |ui| {
+                ui.add(egui::Label::new(format!("FPS: {}", 1.0 / avg_frame_time)));
+                ui.add(
+                    egui::Slider::new(&mut self.camera_controller.speed, 0.0..=5.0)
+                        .text("Camera speed"),
+                );
+            });
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -428,19 +474,6 @@ impl App {
 
         let mut platform = self.platform.borrow_mut();
 
-        platform.update_time(self.start_time.elapsed().as_secs_f64());
-
-        platform.begin_frame();
-
-        // TODO:
-        egui::Window::new("Settings").show(&platform.context(), |ui| {
-            ui.add(egui::Label::new(format!("FPS: {}", self.fps)));
-            ui.add(
-                egui::Slider::new(&mut self.camera_controller.speed, 0.0..=5.0)
-                    .text("Camera speed"),
-            );
-        });
-
         let full_output = platform.end_frame(Some(self.window()));
         let paint_jobs = platform.context().tessellate(full_output.shapes);
 
@@ -449,14 +482,12 @@ impl App {
             physical_height: self.window_size.height,
             scale_factor: self.window.scale_factor() as f32,
         };
-        let tdelta: egui::TexturesDelta = full_output.textures_delta;
+
         self.egui_rpass
-            .add_textures(&self.device, &self.queue, &tdelta)
-            .expect("add texture ok");
+            .add_textures(&self.device, &self.queue, &full_output.textures_delta)
+            .expect("error adding textures");
         self.egui_rpass
             .update_buffers(&self.device, &self.queue, &paint_jobs, &screen_descriptor);
-
-        // Record all render passes.
         self.egui_rpass
             .execute(&mut encoder, &view, &paint_jobs, &screen_descriptor, None)
             .unwrap();
@@ -465,14 +496,11 @@ impl App {
         output.present();
 
         self.egui_rpass
-            .remove_textures(tdelta)
-            .expect("remove texture ok");
+            .remove_textures(full_output.textures_delta)
+            .expect("error removing textures");
 
         Ok(())
     }
-
-    #[allow(dead_code)]
-    pub fn render_ui(&mut self) {}
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
