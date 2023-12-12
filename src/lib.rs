@@ -4,7 +4,7 @@ use winit::{
     dpi::LogicalSize,
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoopBuilder},
-    window::WindowBuilder,
+    window::{CursorGrabMode, WindowBuilder},
 };
 
 use crate::app::App;
@@ -38,9 +38,6 @@ pub async fn run() {
         .with_title("Raytracer")
         .build(&event_loop)
         .unwrap();
-
-    // window.set_cursor_grab(CursorGrabMode::Confined).unwrap();
-    // window.set_cursor_visible(false);
 
     let mut app = App::new(window).await;
 

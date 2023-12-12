@@ -186,6 +186,7 @@ impl App {
             up: Vector3::new(0.0, 1.0, 0.0),
             right: Vector3::new(1.0, 0.0, 0.0),
             focal_length: 1.0,
+            vfov: 90.0,
         };
         let spheres = vec![
             Sphere {
@@ -197,14 +198,14 @@ impl App {
             Sphere {
                 center: Vector3::new(1.0, 0.0, -1.0),
                 radius: 0.5,
-                albedo: Vector3::new(0.8, 0.3, 0.3),
-                material: Material::Metal,
+                albedo: Vector3::new(1.0, 1.0, 1.0),
+                material: Material::Dielectric,
             },
             Sphere {
                 center: Vector3::new(-1.0, 0.0, -1.0),
                 radius: 0.5,
-                albedo: Vector3::new(0.8, 0.3, 0.3),
-                material: Material::Metal,
+                albedo: Vector3::new(1.0, 1.0, 1.0),
+                material: Material::Dielectric,
             },
             Sphere {
                 center: Vector3::new(0.0, 1.0, -1.0),
@@ -421,6 +422,7 @@ impl App {
                     egui::Slider::new(&mut self.camera_controller.speed, 0.0..=5.0)
                         .text("Camera speed"),
                 );
+                ui.add(egui::Slider::new(&mut self.camera.vfov, 0.10..=100.0).text("Camera vfov"));
             });
     }
 
@@ -512,7 +514,7 @@ impl App {
     }
 
     pub fn input(&mut self, event: &WindowEvent) {
-        self.camera_controller.input(event);
+        self.camera_controller.input(event, &mut self.window);
     }
 
     pub fn ui_input(&mut self, event: &Event<CustomEvent>) {

@@ -9,18 +9,18 @@ struct Sphere {
   center: vec3<f32>,
   radius: f32,
   albedo: vec3<f32>,
-  material: u32,
+  material: f32,
 }
 
 struct Camera {
     origin: vec3<f32>,
     focalLength: f32,
     forward: vec3<f32>,
-    _padding: u32,
+    vfov: f32,
     right: vec3<f32>,
-    _padding2: u32,
+    _padding2: f32,
     up: vec3<f32>,
-    _padding3: u32,
+    _padding3: f32,
 }
 
 struct HitRecord {
@@ -30,7 +30,7 @@ struct HitRecord {
     normal: vec3<f32>,
     frontFace: bool,
     attenuation: vec3<f32>,
-    material: u32,
+    material: f32,
 }
 
 @group(0) @binding(0) var outputTex: texture_storage_2d<rgba8unorm, write>;
@@ -52,11 +52,14 @@ fn main(@builtin(global_invocation_id) threadId: vec3<u32>) {
     }
 
     let aspectRatio: f32 = f32(screen_size.x) / f32(screen_size.y);
-    let viewPortHeight: f32 = 2.0;
+
+    let theta = radians(camera.vfov);
+    let h = tan(theta / 2.0);
+    let viewPortHeight: f32 = 2.0 * h * camera.focalLength;
     let viewPortWidth: f32 = aspectRatio * viewPortHeight;
 
-    let viewPortU: vec3<f32> = vec3<f32>(viewPortWidth, 0.0, 0.0);
-    let viewPortV: vec3<f32> = vec3<f32>(0.0, -viewPortHeight, 0.0);
+    let viewPortU: vec3<f32> = viewPortWidth * camera.right;
+    let viewPortV: vec3<f32> = -viewPortHeight * camera.up;
 
     let pixelDeltaU = viewPortU / f32(screen_size.x);
     let pixelDeltaV = viewPortV / f32(screen_size.y);
@@ -99,10 +102,11 @@ fn rayColor(initialRay: Ray) -> vec3<f32> {
         }
 
         var bounceDir: vec3<f32>;
-        switch (hitRecord.material) {
+        let dir = normalize(currentRay.direction);
+        switch (u32(hitRecord.material)) {
             // Lambertian
             case 0u: {
-                bounceDir = scatter(currentRay.direction, hitRecord.normal);
+                bounceDir = scatter(dir, hitRecord.normal);
                 if dot(bounceDir, hitRecord.normal) <= 0.0 {
                     return color * hitRecord.attenuation;
                 }
@@ -110,14 +114,31 @@ fn rayColor(initialRay: Ray) -> vec3<f32> {
             }
             // Metal
             case 1u: {
-                bounceDir = reflect(currentRay.direction, hitRecord.normal);
+                bounceDir = reflect(dir, hitRecord.normal);
                 if dot(bounceDir, hitRecord.normal) <= 0.0 {
                     return color * hitRecord.attenuation;
                 }
                 break;
             }
+            // Dielectric
+            case 2u: {
+                let refractionRatio: f32 = select(1.5, 1.0 / 1.5, hitRecord.frontFace);
+
+                let cosTheta: f32 = min(dot(-dir, hitRecord.normal), 1.0);
+                let sinTheta: f32 = sqrt(1.0 - cosTheta * cosTheta);
+
+                let cannotRefract: bool = refractionRatio * sinTheta > 1.0;
+
+                if cannotRefract || reflectance(cosTheta, refractionRatio) > rand(hitRecord.p.xy) {
+                    bounceDir = reflect(dir, hitRecord.normal);
+                } else {
+                    bounceDir = refract(dir, hitRecord.normal, refractionRatio);
+                }
+
+                break;
+            }
             default: {
-                bounceDir = scatter(currentRay.direction, hitRecord.normal);
+                bounceDir = scatter(dir, hitRecord.normal);
                 break;
             }
         }
@@ -143,7 +164,7 @@ fn hitScene(ray: Ray) -> HitRecord {
         vec3<f32>(0.0, 0.0, 0.0),
         false,
         vec3<f32>(0.0, 0.0, 0.0),
-        0u
+        0.0
     );
 
     for (var i = 0u; i < arrayLength(&spheres); i = i + 1u) {
@@ -215,7 +236,23 @@ fn scatter(dir: vec3<f32 >, normal: vec3<f32>) -> vec3<f32> {
 
 fn reflect(dir: vec3<f32 >, normal: vec3<f32>) -> vec3<f32> {
     let reflected: vec3<f32> = normalize(dir - 2.0 * dot(dir, normal) * normal);
-    let fuzz: f32 = 0.2;
+    let fuzz: f32 = 0.0;
 
     return reflected + fuzz * randomUnit(dir.xy) * dot(reflected, normal);
+}
+
+fn reflectance(cosine: f32, refIdx: f32) -> f32 {
+    let r0: f32 = (1.0 - refIdx) / (1.0 + refIdx);
+    let r0Squared: f32 = r0 * r0;
+
+    return r0Squared + (1.0 - r0Squared) * pow(1.0 - cosine, 5.0);
+}
+
+fn refract(dir: vec3<f32 >, normal: vec3<f32>, etaiOverEtat: f32) -> vec3<f32> {
+    let cosTheta: f32 = min(dot(-dir, normal), 1.0);
+
+    let rOutPerp: vec3<f32> = etaiOverEtat * (dir + cosTheta * normal);
+    let rOutParallel: vec3<f32> = -sqrt(abs(1.0 - dot(rOutPerp, rOutPerp))) * normal;
+
+    return rOutParallel + rOutPerp;
 }

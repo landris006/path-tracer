@@ -21,7 +21,7 @@ pub struct SphereBuffer {
     center: [f32; 3],
     radius: f32,
     albedo: [f32; 3],
-    material: u32,
+    material: f32,
 }
 impl From<&Sphere> for SphereBuffer {
     fn from(sphere: &Sphere) -> Self {
@@ -30,9 +30,9 @@ impl From<&Sphere> for SphereBuffer {
             radius: sphere.radius,
             albedo: sphere.albedo.into(),
             material: match sphere.material {
-                Material::Diffuse => 0,
-                Material::Metal => 1,
-                Material::Dielectric => 2,
+                Material::Diffuse => 0.0,
+                Material::Metal => 1.0,
+                Material::Dielectric => 2.0,
             },
         }
     }
