@@ -17,7 +17,7 @@ use winit::{
 use crate::{
     camera::{Camera, CameraBuffer, CameraController},
     scene::{Material, Sphere, SphereBuffer},
-    CustomEvent, WINDOW_HEIGHT, WINDOW_WIDTH,
+    texture, CustomEvent, WINDOW_HEIGHT, WINDOW_WIDTH,
 };
 
 const NUMBER_OF_SAMPLES: usize = 16;
@@ -31,6 +31,7 @@ pub struct App {
     window_size: winit::dpi::PhysicalSize<u32>,
     compute_pipeline: wgpu::ComputePipeline,
     compute_bind_group: wgpu::BindGroup,
+    sky_dome_texture_bind_group: wgpu::BindGroup,
     copy_pipeline: wgpu::RenderPipeline,
     copy_bind_group: wgpu::BindGroup,
     time_buffer: wgpu::Buffer,
@@ -201,6 +202,9 @@ impl App {
             .map(|texture| texture.create_view(&TextureViewDescriptor::default()))
             .collect::<Vec<_>>();
 
+        let skydome_texture =
+            texture::load_hdr_texture("assets/skydome.hdr", &device, &queue).unwrap();
+
         let camera = Camera {
             origin: Vector3::new(0.0, 0.0, 0.0),
             forward: Vector3::new(0.0, 0.0, -1.0),
@@ -291,10 +295,63 @@ impl App {
             ],
         });
 
+        let sky_dome_texture_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: None,
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Sampler(SamplerBindingType::NonFiltering),
+                        count: None,
+                    },
+                ],
+            });
+
+        let sky_texture_view = skydome_texture.create_view(&TextureViewDescriptor::default());
+
+        let sky_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+        let sky_dome_texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &sky_dome_texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&sky_texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sky_sampler),
+                },
+            ],
+        });
+
         let compute_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: None,
-                bind_group_layouts: &[&compute_bind_group_layout],
+                bind_group_layouts: &[
+                    &compute_bind_group_layout,
+                    &sky_dome_texture_bind_group_layout,
+                ],
                 push_constant_ranges: &[],
             });
         let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -323,7 +380,6 @@ impl App {
                             view_dimension: wgpu::TextureViewDimension::D2,
                         },
                         count: Some(NonZeroU32::new(NUMBER_OF_SAMPLES as u32).unwrap()),
-                        // count: None,
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
@@ -398,6 +454,7 @@ impl App {
             copy_bind_group,
             compute_pipeline,
             compute_bind_group,
+            sky_dome_texture_bind_group,
             last_frame_time: Instant::now(),
             time_buffer,
             start_time: Instant::now(),
@@ -492,6 +549,7 @@ impl App {
         let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
         compute_pass.set_pipeline(&self.compute_pipeline);
         compute_pass.set_bind_group(0, &self.compute_bind_group, &[]);
+        compute_pass.set_bind_group(1, &self.sky_dome_texture_bind_group, &[]);
         compute_pass.dispatch_workgroups(
             self.window_size.width / 16,
             self.window_size.height / 16,

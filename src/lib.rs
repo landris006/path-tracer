@@ -4,13 +4,14 @@ use winit::{
     dpi::LogicalSize,
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoopBuilder},
-    window::{CursorGrabMode, WindowBuilder},
+    window::WindowBuilder,
 };
 
 use crate::app::App;
 mod app;
 mod camera;
 mod scene;
+mod texture;
 
 const WINDOW_WIDTH: u32 = 1920;
 const WINDOW_HEIGHT: u32 = 1080;

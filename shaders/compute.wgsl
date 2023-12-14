@@ -38,6 +38,11 @@ struct HitRecord {
 @group(0) @binding(2) var<storage, read> spheres: array<Sphere>;
 @group(0) @binding(3) var<uniform> time: u32;
 
+@group(1) @binding(0)
+var skyTexture: texture_2d<f32>;
+@group(1) @binding(1)
+var sky_dome_sampler: sampler;
+
 const T_MIN: f32 = 0.001;
 const T_MAX: f32 = 1000.0;
 const MAX_DEPTH: u32 = 30u;
@@ -153,9 +158,25 @@ fn rayColor(initialRay: Ray) -> vec3<f32> {
 }
 
 fn getBackgroundColor(ray: Ray) -> vec3<f32> {
-    let unitDirection: vec3<f32> = normalize(ray.direction);
-    let a: f32 = 0.5 * (unitDirection.y + 1.0);
-    return (1.0 - a) * vec3<f32>(1.0, 1.0, 1.0) + a * vec3<f32>(0.5, 0.7, 1.0);
+    var azimuth: f32 = atan2(ray.direction.z, ray.direction.x);
+    var inclination: f32 = acos(ray.direction.y);
+
+// Map azimuth and inclination to texture coordinates
+    var textureCoords: vec2<f32> = vec2<f32>(
+        0.5 + azimuth / (2.0 * 3.14159265359), // Map azimuth to the X-axis (range from 0 to 1)
+        inclination / 3.14159265359 // Map inclination to the Y-axis (range from 0 to 1)
+    );
+
+    let textureDimension: vec2<u32> = textureDimensions(skyTexture);
+
+    var textureCoordsU32: vec2<u32> = vec2<u32>(
+        u32(textureCoords.x * f32(textureDimension.x - 1u)),
+        u32(textureCoords.y * f32(textureDimension.y - 1u))
+    );
+
+    let bgColor: vec4<f32> = textureLoad(skyTexture, textureCoordsU32, i32(0));
+
+    return bgColor.xyz;
 }
 
 fn hitScene(ray: Ray) -> HitRecord {
