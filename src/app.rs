@@ -1,9 +1,14 @@
-use std::{cell::RefCell, path::Path, time::Instant};
+use std::{
+    cell::RefCell,
+    num::{self, NonZeroU32},
+    path::Path,
+    time::Instant,
+};
 
 use cgmath::Vector3;
 use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
 use egui_winit_platform::{Platform, PlatformDescriptor};
-use wgpu::{util::DeviceExt, Extent3d, SamplerBindingType, TextureViewDescriptor};
+use wgpu::{util::DeviceExt, Extent3d, SamplerBindingType, Texture, TextureViewDescriptor};
 use winit::{
     event::{Event, WindowEvent},
     window::Window,
@@ -14,6 +19,8 @@ use crate::{
     scene::{Material, Sphere, SphereBuffer},
     CustomEvent, WINDOW_HEIGHT, WINDOW_WIDTH,
 };
+
+const NUMBER_OF_SAMPLES: usize = 16;
 
 pub struct App {
     start_time: Instant,
@@ -33,6 +40,7 @@ pub struct App {
     camera_buffer: wgpu::Buffer,
     platform: RefCell<Platform>,
     egui_rpass: RenderPass,
+    output_textures: [Texture; NUMBER_OF_SAMPLES],
     frame_times: Vec<f32>,
     window: Window,
 }
@@ -68,7 +76,7 @@ impl App {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::empty(),
+                    features: wgpu::Features::TEXTURE_BINDING_ARRAY | wgpu::Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING,
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web, we'll have to disable some.
                     limits: if cfg!(target_arch = "wasm32") {
@@ -164,21 +172,34 @@ impl App {
                 ],
             });
 
-        let output_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: None,
-            size: Extent3d {
-                width: WINDOW_WIDTH,
-                height: WINDOW_HEIGHT,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        let view = output_texture.create_view(&TextureViewDescriptor::default());
+        let output_textures: [Texture; NUMBER_OF_SAMPLES] = (0..NUMBER_OF_SAMPLES)
+            .map(|_| {
+                device.create_texture(&wgpu::TextureDescriptor {
+                    label: None,
+                    size: Extent3d {
+                        width: WINDOW_WIDTH,
+                        height: WINDOW_HEIGHT,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    usage: wgpu::TextureUsages::STORAGE_BINDING
+                        | wgpu::TextureUsages::TEXTURE_BINDING
+                        | wgpu::TextureUsages::COPY_SRC
+                        | wgpu::TextureUsages::COPY_DST,
+                    view_formats: &[],
+                })
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+
+        let views = output_textures
+            .iter()
+            .map(|texture| texture.create_view(&TextureViewDescriptor::default()))
+            .collect::<Vec<_>>();
 
         let camera = Camera {
             origin: Vector3::new(0.0, 0.0, 0.0),
@@ -231,7 +252,7 @@ impl App {
         let sphere_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&sphere_buffer),
-            usage: wgpu::BufferUsages::STORAGE,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
 
         let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -253,7 +274,7 @@ impl App {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&view),
+                    resource: wgpu::BindingResource::TextureView(views.first().unwrap()),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -301,7 +322,8 @@ impl App {
                             sample_type: wgpu::TextureSampleType::Float { filterable: false },
                             view_dimension: wgpu::TextureViewDimension::D2,
                         },
-                        count: None,
+                        count: Some(NonZeroU32::new(NUMBER_OF_SAMPLES as u32).unwrap()),
+                        // count: None,
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
@@ -320,13 +342,19 @@ impl App {
             mipmap_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
+
         let copy_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &copy_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&view),
+                    resource: wgpu::BindingResource::TextureViewArray(
+                        (0..NUMBER_OF_SAMPLES)
+                            .map(|i| &views[i])
+                            .collect::<Vec<_>>()
+                            .as_slice(),
+                    ),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -378,6 +406,7 @@ impl App {
             camera_buffer,
             platform: RefCell::new(platform),
             egui_rpass,
+            output_textures,
             frame_times: Vec::new(),
             window,
         }
@@ -398,7 +427,7 @@ impl App {
         self.queue.write_buffer(
             &self.time_buffer,
             0,
-            bytemuck::cast_slice(&[self.start_time.elapsed().as_secs_f32()]),
+            bytemuck::cast_slice(&[self.start_time.elapsed().as_millis() / 4]),
         );
         self.queue.write_buffer(
             &self.camera_buffer,
@@ -437,6 +466,28 @@ impl App {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Render Encoder"),
             });
+
+        (1..NUMBER_OF_SAMPLES).rev().for_each(|i| {
+            encoder.copy_texture_to_texture(
+                wgpu::ImageCopyTexture {
+                    texture: &self.output_textures[i - 1],
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::ImageCopyTexture {
+                    texture: &self.output_textures[i],
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                Extent3d {
+                    width: WINDOW_WIDTH,
+                    height: WINDOW_HEIGHT,
+                    depth_or_array_layers: 1,
+                },
+            );
+        });
 
         let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
         compute_pass.set_pipeline(&self.compute_pipeline);

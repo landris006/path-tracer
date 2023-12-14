@@ -18,11 +18,18 @@ fn vs_main(
 
 
 @group(0) @binding(0)
-var r_color: texture_2d<f32>;
+var textures: binding_array<texture_2d<f32>>;
 @group(0) @binding(1)
-var r_sampler: sampler;
+var texture_sampler: sampler;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return textureSample(r_color, r_sampler, in.tex_coord);
+    var color = vec4<f32>(0.0);
+    let sample_size = 4u;
+
+    for (var i = 0u; i < sample_size; i = i + 1u) {
+        color = color + textureSample(textures[i], texture_sampler, in.tex_coord);
+    }
+
+    return color / f32(sample_size);
 }

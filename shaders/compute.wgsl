@@ -36,15 +36,17 @@ struct HitRecord {
 @group(0) @binding(0) var outputTex: texture_storage_2d<rgba8unorm, write>;
 @group(0) @binding(1) var<uniform> camera: Camera;
 @group(0) @binding(2) var<storage, read> spheres: array<Sphere>;
-@group(0) @binding(3) var<uniform> time: f32;
+@group(0) @binding(3) var<uniform> time: u32;
 
 const T_MIN: f32 = 0.001;
 const T_MAX: f32 = 1000.0;
 const MAX_DEPTH: u32 = 30u;
-const SAMPLE_SIZE: u32 = 30u;
+const SAMPLE_SIZE: u32 = 4u;
 
 @compute @workgroup_size(16, 16)
 fn main(@builtin(global_invocation_id) threadId: vec3<u32>) {
+    var randomState: vec4<u32> = vec4<u32>(threadId.xy, threadId.xy + vec2<u32>(1u, 1u) * time);
+
     let screen_size: vec2<u32> = vec2<u32>(textureDimensions(outputTex));
 
     if threadId.x >= screen_size.x || threadId.y >= screen_size.y {
@@ -71,8 +73,8 @@ fn main(@builtin(global_invocation_id) threadId: vec3<u32>) {
 
     var color: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
     for (var i = 0u; i < SAMPLE_SIZE; i = i + 1u) {
-        let px = -0.5 + rand(pixelLocation.xy * f32(i));
-        let py = -0.5 + rand(pixelLocation.yx * f32(i) * px);
+        let px: f32 = -0.5 + hybridTaus(&randomState).value;
+        let py: f32 = -0.5 + hybridTaus(&randomState).value;
 
         let sample: vec3<f32> = pixelDeltaU * px + pixelDeltaV * py;
         let sampleLocation: vec3<f32> = pixelLocation + sample;
