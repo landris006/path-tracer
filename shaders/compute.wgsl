@@ -37,11 +37,7 @@ struct HitRecord {
 @group(0) @binding(1) var<uniform> camera: Camera;
 @group(0) @binding(2) var<storage, read> spheres: array<Sphere>;
 @group(0) @binding(3) var<uniform> time: u32;
-
-@group(1) @binding(0)
-var skyTexture: texture_2d<f32>;
-@group(1) @binding(1)
-var sky_dome_sampler: sampler;
+@group(0) @binding(4) var skyTexture: texture_2d<f32>;
 
 const T_MIN: f32 = 0.001;
 const T_MAX: f32 = 1000.0;
@@ -86,7 +82,7 @@ fn main(@builtin(global_invocation_id) threadId: vec3<u32>) {
 
         let ray: Ray = Ray(camera.origin, sampleLocation - camera.origin);
 
-        color = color + rayColor(ray);
+        color = color + rayColor(ray, &randomState);
     }
 
     color = color / f32(SAMPLE_SIZE);
@@ -95,9 +91,10 @@ fn main(@builtin(global_invocation_id) threadId: vec3<u32>) {
     textureStore(outputTex, vec2<i32>(threadId.xy), fragColor);
 }
 
-fn rayColor(initialRay: Ray) -> vec3<f32> {
+fn rayColor(initialRay: Ray, randomState: ptr<function, vec4<u32>>) -> vec3<f32> {
     var numberOfBounces: u32 = 0u;
     var color = vec3<f32>(1.0, 1.0, 1.0);
+    let randomSeed = hybridTaus(randomState).value;
 
     var currentRay: Ray = initialRay;
     for (var i = 0u; i < MAX_DEPTH; i = i + 1u) {
@@ -113,9 +110,9 @@ fn rayColor(initialRay: Ray) -> vec3<f32> {
         switch (u32(hitRecord.material)) {
             // Lambertian
             case 0u: {
-                bounceDir = scatter(dir, hitRecord.normal);
+                bounceDir = scatter(dir, hitRecord.normal, randomSeed);
                 if dot(bounceDir, hitRecord.normal) <= 0.0 {
-                    return color * hitRecord.attenuation;
+                    return color * hitRecord.attenuation * getBackgroundColor(currentRay);
                 }
                 break;
             }
@@ -123,7 +120,7 @@ fn rayColor(initialRay: Ray) -> vec3<f32> {
             case 1u: {
                 bounceDir = reflect(dir, hitRecord.normal);
                 if dot(bounceDir, hitRecord.normal) <= 0.0 {
-                    return color * hitRecord.attenuation;
+                    return color * hitRecord.attenuation * getBackgroundColor(currentRay);
                 }
                 break;
             }
@@ -145,7 +142,7 @@ fn rayColor(initialRay: Ray) -> vec3<f32> {
                 break;
             }
             default: {
-                bounceDir = scatter(dir, hitRecord.normal);
+                bounceDir = scatter(dir, hitRecord.normal, randomSeed);
                 break;
             }
         }
@@ -247,8 +244,8 @@ fn hitSphere(ray: Ray, sphere: Sphere) -> HitRecord {
     return hitRecord;
 }
 
-fn scatter(dir: vec3<f32 >, normal: vec3<f32>) -> vec3<f32> {
-    var scatterDirection: vec3<f32> = normal + randomUnit(dir.xy);
+fn scatter(dir: vec3<f32 >, normal: vec3<f32>, seed: f32) -> vec3<f32> {
+    var scatterDirection: vec3<f32> = normal + randomUnit(dir.xy * seed);
 
     if abs(scatterDirection.x) < 1e-8 && abs(scatterDirection.y) < 1e-8 && abs(scatterDirection.z) < 1e-8 {
         scatterDirection = normal;

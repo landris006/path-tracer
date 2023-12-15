@@ -1,5 +1,12 @@
 use cgmath::Vector3;
 
+use crate::camera::Camera;
+
+pub struct Scene {
+    pub camera: Camera,
+    pub spheres: Vec<Sphere>,
+}
+
 #[derive(Debug)]
 pub enum Material {
     Diffuse,

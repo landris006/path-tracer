@@ -10,6 +10,7 @@ use winit::{
 use crate::app::App;
 mod app;
 mod camera;
+mod renderer;
 mod scene;
 mod texture;
 
@@ -43,12 +44,11 @@ pub async fn run() {
     let mut app = App::new(window).await;
 
     event_loop.run(move |event, _, control_flow| {
-        app.ui_input(&event);
+        app.renderer.ui_input(&event);
 
         match event {
             Event::RedrawRequested(window_id) if window_id == app.window().id() => {
                 app.update();
-                app.setup_ui();
 
                 match app.render() {
                     Ok(_) => {}
