@@ -13,6 +13,7 @@ mod camera;
 mod renderer;
 mod scene;
 mod texture;
+mod ui;
 
 const WINDOW_WIDTH: u32 = 1920;
 const WINDOW_HEIGHT: u32 = 1080;
@@ -44,7 +45,7 @@ pub async fn run() {
     let mut app = App::new(window).await;
 
     event_loop.run(move |event, _, control_flow| {
-        app.renderer.ui_input(&event);
+        app.ui_input(&event);
 
         match event {
             Event::RedrawRequested(window_id) if window_id == app.window().id() => {

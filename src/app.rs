@@ -2,21 +2,22 @@ use std::time::Instant;
 
 use cgmath::Vector3;
 
-use wgpu::util::DeviceExt;
-use winit::{event::WindowEvent, window::Window};
-
-use crate::{
-    camera::{Camera, CameraBuffer, CameraController},
-    renderer::{Renderer, RendererDescriptor},
-    scene::{Material, Scene, Sphere},
+use winit::{
+    event::{Event, WindowEvent},
+    window::Window,
 };
 
-const NUMBER_OF_SAMPLES: usize = 16;
+use crate::{
+    camera::{Camera, CameraController},
+    renderer::Renderer,
+    scene::{Material, Scene, Sphere},
+    ui::Ui,
+    CustomEvent,
+};
 
 pub struct App {
     pub renderer: Renderer,
-
-    start_time: Instant,
+    ui: Ui,
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -26,7 +27,9 @@ pub struct App {
     scene: Scene,
     camera_controller: CameraController,
 
+    start_time: Instant,
     last_frame_time: std::time::Instant,
+    frame_times: Vec<u128>,
 
     window: Window,
 }
@@ -98,15 +101,7 @@ impl App {
         };
         surface.configure(&device, &config);
 
-        // asd
-
-        let renderer = Renderer::new(RendererDescriptor {
-            window: &window,
-            device: &device,
-            queue: &queue,
-            surface_config: &config,
-            surface_format: &surface_format,
-        });
+        let renderer = Renderer::new(&device, &queue, &config);
 
         let camera = Camera {
             origin: Vector3::new(0.0, 0.0, 0.0),
@@ -156,6 +151,7 @@ impl App {
             },
         ];
 
+        let ui = Ui::new(&window, &device, surface_format);
         let scene = Scene { camera, spheres };
 
         Self {
@@ -164,36 +160,77 @@ impl App {
             queue,
             config,
             window_size,
-
-            start_time: Instant::now(),
+            ui,
             scene,
             camera_controller: CameraController::new(),
+            start_time: Instant::now(),
             last_frame_time: Instant::now(),
+            frame_times: Vec::new(),
             renderer,
             window,
         }
     }
 
+    fn setup_ui(&mut self) {
+        self.ui
+            .begin_new_frame(self.start_time.elapsed().as_secs_f64());
+
+        let avg_frame_time = self.frame_times.iter().sum::<u128>() / self.frame_times.len() as u128;
+
+        let platform = self.ui.platform_mut();
+
+        egui::Window::new("Settings")
+            .resizable(true)
+            .show(&platform.context(), |ui| {
+                ui.add(egui::Label::new(format!(
+                    "Frame time: {}ms ({} FPS)",
+                    avg_frame_time,
+                    1000 / avg_frame_time
+                )));
+            });
+    }
+
     pub fn update(&mut self) {
-        let now = std::time::Instant::now();
+        let now = Instant::now();
         let delta = now - self.last_frame_time;
         self.last_frame_time = now;
+
+        self.frame_times.push(delta.as_millis());
+        if self.frame_times.len() > 100 {
+            self.frame_times.remove(0);
+        }
 
         self.camera_controller
             .update_camera(&mut self.scene.camera, delta.as_secs_f32());
     }
 
+    pub fn ui_input(&mut self, event: &Event<CustomEvent>) {
+        self.ui.handle_event(event);
+    }
+
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+        self.setup_ui();
+
         let mut output = self.surface.get_current_texture()?;
 
-        self.renderer.render(
-            &mut output,
-            &self.scene,
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+
+        self.renderer
+            .render(&mut output, &mut encoder, &self.scene, &self.queue)?;
+
+        self.ui.render(
+            &mut encoder,
+            &output,
+            &self.window,
             &self.device,
             &self.queue,
-            &self.window,
-        )?;
+        );
 
+        self.queue.submit(Some(encoder.finish()));
         output.present();
 
         Ok(())

@@ -1,6 +1,6 @@
-use cgmath::{InnerSpace, Quaternion, Vector2, Vector3, Zero};
+use cgmath::{InnerSpace, Vector2, Vector3, Zero};
 use winit::{
-    event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
+    event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
     window::{CursorGrabMode, Window},
 };
 

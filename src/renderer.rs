@@ -1,29 +1,17 @@
-use std::{cell::RefCell, num::NonZeroU32, path::Path, time::Instant};
+use std::{num::NonZeroU32, path::Path, time::Instant};
 
-use cgmath::Vector3;
-use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
-use egui_winit_platform::{Platform, PlatformDescriptor};
 use wgpu::{
-    util::DeviceExt, Buffer, BufferDescriptor, Device, Extent3d, Queue, SamplerBindingType,
-    SurfaceConfiguration, SurfaceTexture, Texture, TextureFormat, TextureViewDescriptor,
+    Buffer, BufferDescriptor, CommandEncoder, Device, Extent3d, Queue, SamplerBindingType,
+    SurfaceConfiguration, SurfaceTexture, Texture, TextureViewDescriptor,
 };
-use winit::{event::Event, window::Window};
 
 use crate::{
-    camera::{Camera, CameraBuffer},
-    scene::{Material, Scene, Sphere, SphereBuffer},
-    texture, CustomEvent, WINDOW_HEIGHT, WINDOW_WIDTH,
+    camera::CameraBuffer,
+    scene::{Scene, SphereBuffer},
+    texture, WINDOW_HEIGHT, WINDOW_WIDTH,
 };
 
 const NUMBER_OF_SAMPLES: usize = 16;
-
-pub struct RendererDescriptor<'a> {
-    pub window: &'a Window,
-    pub surface_format: &'a TextureFormat,
-    pub surface_config: &'a SurfaceConfiguration,
-    pub device: &'a Device,
-    pub queue: &'a Queue,
-}
 
 pub struct Renderer {
     compute_pipeline: wgpu::ComputePipeline,
@@ -32,12 +20,7 @@ pub struct Renderer {
     copy_pipeline: wgpu::RenderPipeline,
     copy_bind_group: wgpu::BindGroup,
 
-    platform: RefCell<Platform>,
-    egui_rpass: RenderPass,
-
     start_time: Instant,
-    last_frame_time: std::time::Instant,
-    frame_times: Vec<u128>,
 
     time_buffer: wgpu::Buffer,
     camera_buffer: Buffer,
@@ -48,27 +31,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(
-        RendererDescriptor {
-            window,
-            surface_format,
-            surface_config,
-            device,
-            queue,
-        }: RendererDescriptor,
-    ) -> Self {
-        let window_size = window.inner_size();
-
-        let platform = Platform::new(PlatformDescriptor {
-            physical_width: window_size.width,
-            physical_height: window_size.height,
-            scale_factor: window.scale_factor(),
-            ..Default::default()
-        });
-
-        // We use the egui_wgpu_backend crate as the render backend.
-        let egui_rpass = RenderPass::new(device, *surface_format, 1);
-
+    pub fn new(device: &Device, queue: &Queue, surface_config: &SurfaceConfiguration) -> Self {
         let src = load_shader_source(Path::new("shaders"), "compute.wgsl").unwrap();
         let compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("compute"),
@@ -323,49 +286,10 @@ impl Renderer {
             compute_bind_group,
             copy_pipeline,
             copy_bind_group,
-            egui_rpass,
-            platform: RefCell::new(platform),
             camera_buffer,
             time_buffer,
             start_time: Instant::now(),
-            last_frame_time: Instant::now(),
-            frame_times: Vec::new(),
             sphere_buffer,
-        }
-    }
-
-    fn setup_ui(&mut self) {
-        let mut platform = self.platform.borrow_mut();
-        platform.update_time(self.start_time.elapsed().as_secs_f64());
-        platform.begin_frame();
-
-        let avg_frame_time = self.frame_times.iter().sum::<u128>() / self.frame_times.len() as u128;
-
-        egui::Window::new("Settings")
-            .resizable(true)
-            .show(&platform.context(), |ui| {
-                ui.add(egui::Label::new("hello"));
-                ui.add(egui::Label::new(format!(
-                    "Frame time: {}ms ({} FPS)",
-                    avg_frame_time,
-                    1000 / avg_frame_time
-                )));
-                // ui.add(
-                //     egui::Slider::new(&mut self.camera_controller.speed, 0.0..=5.0)
-                //         .text("Camera speed"),
-                // );
-                // ui.add(egui::Slider::new(&mut self.camera.vfov, 0.10..=100.0).text("Camera vfov"));
-            });
-    }
-
-    fn update_time(&mut self) {
-        let now = Instant::now();
-        let delta = now - self.last_frame_time;
-        self.last_frame_time = now;
-
-        self.frame_times.push(delta.as_millis());
-        if self.frame_times.len() > 100 {
-            self.frame_times.remove(0);
         }
     }
 
@@ -398,19 +322,11 @@ impl Renderer {
     pub fn render(
         &mut self,
         output: &mut SurfaceTexture,
+        encoder: &mut CommandEncoder,
         scene: &Scene,
-        device: &Device,
         queue: &Queue,
-        window: &Window,
     ) -> Result<(), wgpu::SurfaceError> {
-        self.update_time();
         self.update_buffers(queue, scene);
-        self.setup_ui();
-
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Render Encoder"),
-        });
-
         (1..NUMBER_OF_SAMPLES).rev().for_each(|i| {
             encoder.copy_texture_to_texture(
                 wgpu::ImageCopyTexture {
@@ -446,6 +362,7 @@ impl Renderer {
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -472,37 +389,7 @@ impl Renderer {
 
         drop(render_pass);
 
-        let mut platform = self.platform.borrow_mut();
-
-        let full_output = platform.end_frame(Some(window));
-        let paint_jobs = platform.context().tessellate(full_output.shapes);
-
-        let screen_descriptor = ScreenDescriptor {
-            physical_width: output.texture.width(),
-            physical_height: output.texture.height(),
-            scale_factor: window.scale_factor() as f32,
-        };
-
-        self.egui_rpass
-            .add_textures(device, queue, &full_output.textures_delta)
-            .expect("error adding textures");
-        self.egui_rpass
-            .update_buffers(device, queue, &paint_jobs, &screen_descriptor);
-        self.egui_rpass
-            .execute(&mut encoder, &view, &paint_jobs, &screen_descriptor, None)
-            .unwrap();
-
-        queue.submit(Some(encoder.finish()));
-
-        self.egui_rpass
-            .remove_textures(full_output.textures_delta)
-            .expect("error removing textures");
-
         Ok(())
-    }
-
-    pub fn ui_input(&mut self, event: &Event<CustomEvent>) {
-        self.platform.borrow_mut().handle_event(event);
     }
 }
 
