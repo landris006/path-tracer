@@ -73,6 +73,7 @@ impl App {
                     } else {
                         wgpu::Limits {
                             max_texture_dimension_2d: 16384,
+                            max_sampled_textures_per_shader_stage: 256,
                             ..Default::default()
                         }
                     },
@@ -103,14 +104,7 @@ impl App {
 
         let renderer = Renderer::new(&device, &queue, &config);
 
-        let camera = Camera {
-            origin: Vector3::new(0.0, 0.0, 0.0),
-            forward: Vector3::new(0.0, 0.0, -1.0),
-            up: Vector3::new(0.0, 1.0, 0.0),
-            right: Vector3::new(1.0, 0.0, 0.0),
-            focal_length: 1.0,
-            vfov: 45.0,
-        };
+        let camera = Camera::new();
 
         let spheres = vec![
             Sphere {
@@ -179,7 +173,7 @@ impl App {
 
         let platform = self.ui.platform_mut();
 
-        egui::Window::new("Settings")
+        egui::Window::new("Info")
             .resizable(true)
             .show(&platform.context(), |ui| {
                 ui.add(egui::Label::new(format!(
@@ -188,6 +182,20 @@ impl App {
                     1000 / avg_frame_time
                 )));
             });
+
+        egui::Window::new("Camera settings")
+            .default_open(false)
+            .resizable(true)
+            .show(&platform.context(), |ui| {
+                ui.add(egui::Slider::new(&mut self.scene.camera.vfov, 0.0..=180.0).text("vfov"));
+                ui.add(
+                    egui::Slider::new(&mut self.camera_controller.speed, 0.0..=10.0)
+                        .text("camera speed"),
+                );
+            });
+
+        self.renderer
+            .render_ui(platform, self.scene.camera.moved_recently());
     }
 
     pub fn update(&mut self) {

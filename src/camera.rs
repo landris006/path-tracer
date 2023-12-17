@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use cgmath::{InnerSpace, Vector2, Vector3, Zero};
 use winit::{
     event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -12,6 +14,25 @@ pub struct Camera {
     pub up: Vector3<f32>,
     pub focal_length: f32,
     pub vfov: f32,
+    last_move_time: Instant,
+}
+
+impl Camera {
+    pub fn new() -> Self {
+        Self {
+            origin: Vector3::new(0.0, 0.0, 0.0),
+            forward: Vector3::new(0.0, 0.0, -1.0),
+            right: Vector3::new(1.0, 0.0, 0.0),
+            up: Vector3::new(0.0, 1.0, 0.0),
+            focal_length: 1.0,
+            vfov: 45.0,
+            last_move_time: Instant::now(),
+        }
+    }
+
+    pub fn moved_recently(&self) -> bool {
+        self.last_move_time.elapsed().as_secs_f32() < 0.2
+    }
 }
 
 #[repr(C)]
@@ -162,6 +183,9 @@ impl CameraController {
             self.yaw.to_radians().sin() * self.pitch.to_radians().cos(),
         );
 
+        if camera.forward.dot(new_forward) < 0.999999 {
+            camera.last_move_time = Instant::now();
+        }
         camera.forward = new_forward.normalize();
         camera.right = camera.forward.cross(Vector3::unit_y()).normalize();
         camera.up = camera.right.cross(camera.forward).normalize();
@@ -190,6 +214,10 @@ impl CameraController {
             Vector3::zero()
         };
 
+        let new_origin = camera.origin + (forward + right + up) * self.speed * delta_time;
+        if new_origin.ne(&camera.origin) {
+            camera.last_move_time = Instant::now();
+        }
         camera.origin += (forward + right + up) * self.speed * delta_time;
     }
 }

@@ -1,5 +1,6 @@
 use std::{num::NonZeroU32, path::Path, time::Instant};
 
+use egui_winit_platform::Platform;
 use wgpu::{
     Buffer, BufferDescriptor, CommandEncoder, Device, Extent3d, Queue, SamplerBindingType,
     SurfaceConfiguration, SurfaceTexture, Texture, TextureViewDescriptor,
@@ -11,7 +12,29 @@ use crate::{
     texture, WINDOW_HEIGHT, WINDOW_WIDTH,
 };
 
-const NUMBER_OF_SAMPLES: usize = 16;
+const MAX_NUMBER_OF_SAMPLES: u32 = 256;
+
+struct ProgressiveRendering {
+    sample_size: u32,
+    sample_size_while_moving: u32,
+    buffer: Buffer,
+    ready_samples: u32,
+    output_textures: [Texture; MAX_NUMBER_OF_SAMPLES as usize],
+}
+
+impl ProgressiveRendering {
+    fn get_sample_size(&self, is_moving: bool) -> u32 {
+        if is_moving {
+            self.sample_size_while_moving
+        } else {
+            u32::min(self.sample_size, self.ready_samples)
+        }
+    }
+
+    fn increment_ready_samples(&mut self) {
+        self.ready_samples = u32::min(self.ready_samples + 1, self.sample_size);
+    }
+}
 
 pub struct Renderer {
     compute_pipeline: wgpu::ComputePipeline,
@@ -26,8 +49,7 @@ pub struct Renderer {
     camera_buffer: Buffer,
     sphere_buffer: Buffer,
 
-    progressive_rendering_samples: Option<u32>,
-    output_textures: [Texture; NUMBER_OF_SAMPLES],
+    progressive_rendering: ProgressiveRendering,
 }
 
 impl Renderer {
@@ -100,7 +122,7 @@ impl Renderer {
                 ],
             });
 
-        let output_textures: [Texture; NUMBER_OF_SAMPLES] = (0..NUMBER_OF_SAMPLES)
+        let output_textures: [Texture; MAX_NUMBER_OF_SAMPLES as usize] = (0..MAX_NUMBER_OF_SAMPLES)
             .map(|_| {
                 device.create_texture(&wgpu::TextureDescriptor {
                     label: None,
@@ -206,6 +228,7 @@ impl Renderer {
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: None,
                 entries: &[
+                    // Output textures
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
                         visibility: wgpu::ShaderStages::FRAGMENT,
@@ -214,12 +237,24 @@ impl Renderer {
                             sample_type: wgpu::TextureSampleType::Float { filterable: false },
                             view_dimension: wgpu::TextureViewDimension::D2,
                         },
-                        count: Some(NonZeroU32::new(NUMBER_OF_SAMPLES as u32).unwrap()),
+                        count: Some(NonZeroU32::new(MAX_NUMBER_OF_SAMPLES).unwrap()),
                     },
+                    // Output texture sampler
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Sampler(SamplerBindingType::NonFiltering),
+                        count: None,
+                    },
+                    // Progressive rendering samples
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
                         count: None,
                     },
                 ],
@@ -234,6 +269,13 @@ impl Renderer {
             ..Default::default()
         });
 
+        let progressive_rendering_samples_buffer = device.create_buffer(&BufferDescriptor {
+            mapped_at_creation: false,
+            size: std::mem::size_of::<u32>() as u64,
+            label: None,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
         let copy_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &copy_bind_group_layout,
@@ -241,8 +283,8 @@ impl Renderer {
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::TextureViewArray(
-                        (0..NUMBER_OF_SAMPLES)
-                            .map(|i| &views[i])
+                        (0..MAX_NUMBER_OF_SAMPLES)
+                            .map(|i| &views[i as usize])
                             .collect::<Vec<_>>()
                             .as_slice(),
                     ),
@@ -250,6 +292,10 @@ impl Renderer {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: progressive_rendering_samples_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -280,8 +326,13 @@ impl Renderer {
         });
 
         Renderer {
-            progressive_rendering_samples: None,
-            output_textures,
+            progressive_rendering: ProgressiveRendering {
+                sample_size: MAX_NUMBER_OF_SAMPLES,
+                sample_size_while_moving: 4,
+                ready_samples: 0,
+                buffer: progressive_rendering_samples_buffer,
+                output_textures,
+            },
             compute_pipeline,
             compute_bind_group,
             copy_pipeline,
@@ -293,7 +344,68 @@ impl Renderer {
         }
     }
 
-    fn update_buffers(&mut self, queue: &Queue, scene: &Scene) {
+    pub fn render_ui(&mut self, platform: &mut Platform, is_moving: bool) {
+        egui::Window::new("Renderer settings")
+            .resizable(true)
+            .show(&platform.context(), |ui| {
+                ui.add(egui::Label::new("Progressive rendering"));
+                ui.add(
+                    egui::Slider::new(
+                        &mut self.progressive_rendering.sample_size,
+                        1..=MAX_NUMBER_OF_SAMPLES,
+                    )
+                    .text("samples"),
+                );
+
+                ui.add(egui::Label::new(format!(
+                    "Samples used: {}/{}",
+                    self.progressive_rendering.get_sample_size(is_moving),
+                    MAX_NUMBER_OF_SAMPLES
+                )));
+
+                ui.add(
+                    egui::Slider::new(
+                        &mut self.progressive_rendering.sample_size_while_moving,
+                        1..=MAX_NUMBER_OF_SAMPLES,
+                    )
+                    .text("samples while moving"),
+                );
+            });
+    }
+
+    fn update(&mut self, scene: &Scene) {
+        if scene.camera.moved_recently() {
+            self.progressive_rendering.ready_samples = 0;
+        }
+    }
+
+    fn update_buffers(&mut self, queue: &Queue, encoder: &mut CommandEncoder, scene: &Scene) {
+        (1..self
+            .progressive_rendering
+            .get_sample_size(scene.camera.moved_recently()))
+            .rev()
+            .for_each(|i| {
+                encoder.copy_texture_to_texture(
+                    wgpu::ImageCopyTexture {
+                        texture: &self.progressive_rendering.output_textures[(i - 1) as usize],
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::ImageCopyTexture {
+                        texture: &self.progressive_rendering.output_textures[i as usize],
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    Extent3d {
+                        width: WINDOW_WIDTH,
+                        height: WINDOW_HEIGHT,
+                        depth_or_array_layers: 1,
+                    },
+                );
+            });
+
         queue.write_buffer(
             &self.time_buffer,
             0,
@@ -317,6 +429,14 @@ impl Renderer {
                     .collect::<Vec<_>>(),
             ),
         );
+
+        queue.write_buffer(
+            &self.progressive_rendering.buffer,
+            0,
+            bytemuck::cast_slice(&[self
+                .progressive_rendering
+                .get_sample_size(scene.camera.moved_recently())]),
+        );
     }
 
     pub fn render(
@@ -326,28 +446,9 @@ impl Renderer {
         scene: &Scene,
         queue: &Queue,
     ) -> Result<(), wgpu::SurfaceError> {
-        self.update_buffers(queue, scene);
-        (1..NUMBER_OF_SAMPLES).rev().for_each(|i| {
-            encoder.copy_texture_to_texture(
-                wgpu::ImageCopyTexture {
-                    texture: &self.output_textures[i - 1],
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                wgpu::ImageCopyTexture {
-                    texture: &self.output_textures[i],
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                Extent3d {
-                    width: WINDOW_WIDTH,
-                    height: WINDOW_HEIGHT,
-                    depth_or_array_layers: 1,
-                },
-            );
-        });
+        self.update(scene);
+        self.update_buffers(queue, encoder, scene);
+        self.progressive_rendering.increment_ready_samples();
 
         let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
         compute_pass.set_pipeline(&self.compute_pipeline);

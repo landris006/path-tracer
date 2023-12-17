@@ -21,15 +21,16 @@ fn vs_main(
 var textures: binding_array<texture_2d<f32>>;
 @group(0) @binding(1)
 var texture_sampler: sampler;
+@group(0) @binding(2)
+var<uniform> progressive_rendering_samples: u32;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var color = vec4<f32>(0.0);
-    let sample_size = 4u;
 
-    for (var i = 0u; i < sample_size; i = i + 1u) {
+    for (var i = 0u; i < progressive_rendering_samples; i = i + 1u) {
         color = color + textureSample(textures[i], texture_sampler, in.tex_coord);
     }
 
-    return color / f32(sample_size);
+    return color / f32(progressive_rendering_samples);
 }
