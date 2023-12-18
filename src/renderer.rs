@@ -330,7 +330,7 @@ impl Renderer {
         Renderer {
             settings: Settings {
                 samples_per_pixel: 4,
-                max_bounces: 32,
+                depth: 32,
                 t_min: 0.0001,
                 t_max: 1000.0,
             },
@@ -362,10 +362,7 @@ impl Renderer {
                         egui::Slider::new(&mut self.settings.samples_per_pixel, 1..=256)
                             .text("samples per pixel"),
                     );
-                    ui.add(
-                        egui::Slider::new(&mut self.settings.max_bounces, 1..=256)
-                            .text("max bounces"),
-                    );
+                    ui.add(egui::Slider::new(&mut self.settings.depth, 1..=256).text("depth"));
                     ui.add(egui::Slider::new(&mut self.settings.t_min, 0.0..=1.0).text("t_min"));
                     ui.add(egui::Slider::new(&mut self.settings.t_max, 1.0..=9000.0).text("t_max"));
                 });
@@ -527,7 +524,7 @@ impl Renderer {
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct Settings {
     samples_per_pixel: u32,
-    max_bounces: u32,
+    depth: u32,
     t_min: f32,
     t_max: f32,
 }

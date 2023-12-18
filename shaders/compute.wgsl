@@ -35,7 +35,7 @@ struct HitRecord {
 
 struct Settings {
   samplesPerPixel: u32,
-  maxBounces: u32,
+  depth: u32,
   tMin: f32,
   tMax: f32,
 }
@@ -100,7 +100,7 @@ fn rayColor(initialRay: Ray, randomState: ptr<function, vec4<u32>>) -> vec3<f32>
     let randomSeed = hybridTaus(randomState).value;
 
     var currentRay: Ray = initialRay;
-    for (var i = 0u; i < settings.maxBounces; i = i + 1u) {
+    for (var i = 0u; i < settings.depth; i = i + 1u) {
         numberOfBounces = numberOfBounces + 1u;
         let hitRecord: HitRecord = hitScene(currentRay);
 
@@ -158,25 +158,27 @@ fn rayColor(initialRay: Ray, randomState: ptr<function, vec4<u32>>) -> vec3<f32>
 }
 
 fn getBackgroundColor(ray: Ray) -> vec3<f32> {
-    var azimuth: f32 = atan2(ray.direction.z, ray.direction.x);
-    var inclination: f32 = acos(ray.direction.y);
+    let unitDirection: vec3<f32> = normalize(ray.direction);
+    let a: f32 = 0.5 * (unitDirection.y + 1.0);
+    return (1.0 - a) * vec3<f32>(1.0, 1.0, 1.0) + a * vec3<f32>(0.5, 0.7, 1.0);
 
-// Map azimuth and inclination to texture coordinates
-    var textureCoords: vec2<f32> = vec2<f32>(
-        0.5 + azimuth / (2.0 * 3.14159265359), // Map azimuth to the X-axis (range from 0 to 1)
-        inclination / 3.14159265359 // Map inclination to the Y-axis (range from 0 to 1)
-    );
+   //  let phi = atan2(ray.direction.z, ray.direction.x);
+   //  let theta = acos(ray.direction.y);
+   //  
+   //  // Normalize phi and theta to [0, 1] range
+   //  let u = (atan2(ray.direction.x, ray.direction.z) + PI) / (2.0 * PI);
+   //  let v = -ray.direction.y * 0.5 + 0.5; // Adjusting y to [0, 1] range
 
-    let textureDimension: vec2<u32> = textureDimensions(skyTexture);
+   //  let textureDimension: vec2<u32> = textureDimensions(skyTexture);
 
-    var textureCoordsU32: vec2<u32> = vec2<u32>(
-        u32(textureCoords.x * f32(textureDimension.x - 1u)),
-        u32(textureCoords.y * f32(textureDimension.y - 1u))
-    );
+   //  var textureCoordsU32: vec2<u32> = vec2<u32>(
+   //      u32(u * f32(textureDimension.x - 1u)),
+   //      u32(v * f32(textureDimension.y - 1u))
+   //  );
 
-    let bgColor: vec4<f32> = textureLoad(skyTexture, textureCoordsU32, i32(0));
+   //  let bgColor: vec4<f32> = textureLoad(skyTexture, textureCoordsU32, i32(0));
 
-    return bgColor.xyz;
+   //  return bgColor.rgb;
 }
 
 fn hitScene(ray: Ray) -> HitRecord {
