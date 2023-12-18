@@ -187,15 +187,30 @@ impl App {
             .default_open(false)
             .resizable(true)
             .show(&platform.context(), |ui| {
-                ui.add(egui::Slider::new(&mut self.scene.camera.vfov, 0.0..=180.0).text("vfov"));
-                ui.add(
-                    egui::Slider::new(&mut self.camera_controller.speed, 0.0..=10.0)
-                        .text("camera speed"),
-                );
+                ui.label("Origin");
+                ui.horizontal(|ui| {
+                    ui.add(egui::DragValue::new(&mut self.scene.camera.origin.x).speed(0.1));
+                    ui.add(egui::DragValue::new(&mut self.scene.camera.origin.y).speed(0.1));
+                    ui.add(egui::DragValue::new(&mut self.scene.camera.origin.z).speed(0.1));
+                });
+                ui.label("Look at");
+                ui.horizontal(|ui| {
+                    ui.add(egui::DragValue::new(&mut self.scene.camera.forward.x).speed(0.1));
+                    ui.add(egui::DragValue::new(&mut self.scene.camera.forward.y).speed(0.1));
+                    ui.add(egui::DragValue::new(&mut self.scene.camera.forward.z).speed(0.1));
+                });
+                ui.label("Vertical FOV");
+                ui.add(egui::Slider::new(&mut self.scene.camera.vfov, 0.0..=180.0));
+                ui.label("Speed");
+                ui.add(egui::Slider::new(
+                    &mut self.camera_controller.speed,
+                    0.0..=10.0,
+                ));
             });
 
         self.renderer
             .render_ui(platform, self.scene.camera.moved_recently());
+        self.scene.render_ui(platform);
     }
 
     pub fn update(&mut self) {

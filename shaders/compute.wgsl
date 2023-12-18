@@ -129,17 +129,17 @@ fn rayColor(initialRay: Ray, randomState: ptr<function, vec4<u32>>) -> vec3<f32>
             }
             // Dielectric
             case 2u: {
-                let refractionRatio: f32 = select(1.5, 1.0 / 1.5, hitRecord.frontFace);
+                let refractionIndex: f32 = select(1.5, 1.0 / 1.5, hitRecord.frontFace);
 
                 let cosTheta: f32 = min(dot(-dir, hitRecord.normal), 1.0);
                 let sinTheta: f32 = sqrt(1.0 - cosTheta * cosTheta);
 
-                let cannotRefract: bool = refractionRatio * sinTheta > 1.0;
+                let cannotRefract: bool = refractionIndex * sinTheta > 1.0;
 
-                if cannotRefract || reflectance(cosTheta, refractionRatio) > rand(hitRecord.p.xy) {
+                if cannotRefract || reflectance(cosTheta, refractionIndex) > rand(hitRecord.p.xy) {
                     bounceDir = reflect(dir, hitRecord.normal);
                 } else {
-                    bounceDir = refract(dir, hitRecord.normal, refractionRatio);
+                    bounceDir = refract(dir, hitRecord.normal, refractionIndex);
                 }
 
                 break;
@@ -158,27 +158,21 @@ fn rayColor(initialRay: Ray, randomState: ptr<function, vec4<u32>>) -> vec3<f32>
 }
 
 fn getBackgroundColor(ray: Ray) -> vec3<f32> {
-    let unitDirection: vec3<f32> = normalize(ray.direction);
-    let a: f32 = 0.5 * (unitDirection.y + 1.0);
-    return (1.0 - a) * vec3<f32>(1.0, 1.0, 1.0) + a * vec3<f32>(0.5, 0.7, 1.0);
+    let phi = atan2(ray.direction.z, ray.direction.x);
+    let theta = acos(ray.direction.y);
 
-   //  let phi = atan2(ray.direction.z, ray.direction.x);
-   //  let theta = acos(ray.direction.y);
-   //  
-   //  // Normalize phi and theta to [0, 1] range
-   //  let u = (atan2(ray.direction.x, ray.direction.z) + PI) / (2.0 * PI);
-   //  let v = -ray.direction.y * 0.5 + 0.5; // Adjusting y to [0, 1] range
+    let u = (atan2(ray.direction.x, ray.direction.z) + PI) / (2.0 * PI);
+    let v = -ray.direction.y * 0.5 + 0.5;
 
-   //  let textureDimension: vec2<u32> = textureDimensions(skyTexture);
+    let textureDimension: vec2<u32> = textureDimensions(skyTexture);
+    var textureCoordsU32: vec2<u32> = vec2<u32>(
+        u32(u * f32(textureDimension.x - 1u)),
+        u32(v * f32(textureDimension.y - 1u))
+    );
 
-   //  var textureCoordsU32: vec2<u32> = vec2<u32>(
-   //      u32(u * f32(textureDimension.x - 1u)),
-   //      u32(v * f32(textureDimension.y - 1u))
-   //  );
+    let bgColor: vec4<f32> = textureLoad(skyTexture, textureCoordsU32, i32(0));
 
-   //  let bgColor: vec4<f32> = textureLoad(skyTexture, textureCoordsU32, i32(0));
-
-   //  return bgColor.rgb;
+    return bgColor.rgb;
 }
 
 fn hitScene(ray: Ray) -> HitRecord {

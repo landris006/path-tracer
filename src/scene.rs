@@ -1,4 +1,6 @@
 use cgmath::Vector3;
+use egui::Color32;
+use egui_winit_platform::Platform;
 
 use crate::camera::Camera;
 
@@ -7,7 +9,50 @@ pub struct Scene {
     pub spheres: Vec<Sphere>,
 }
 
-#[derive(Debug)]
+impl Scene {
+    pub fn render_ui(&mut self, platform: &mut Platform) {
+        egui::Window::new("Scene")
+            .resizable(true)
+            .show(&platform.context(), |ui| {
+                for (i, sphere) in self.spheres.iter_mut().enumerate() {
+                    ui.collapsing(format!("Sphere {}", i), |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("Center");
+                            ui.add(egui::DragValue::new(&mut sphere.center.x).speed(0.1));
+                            ui.add(egui::DragValue::new(&mut sphere.center.y).speed(0.1));
+                            ui.add(egui::DragValue::new(&mut sphere.center.z).speed(0.1));
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Radius");
+                            ui.add(egui::DragValue::new(&mut sphere.radius).speed(0.1));
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Albedo");
+                            ui.add(egui::DragValue::new(&mut sphere.albedo.x));
+                            ui.add(egui::DragValue::new(&mut sphere.albedo.y));
+                            ui.add(egui::DragValue::new(&mut sphere.albedo.z));
+
+                            let mut color: [f32; 3] = sphere.albedo.into();
+                            ui.color_edit_button_rgb(&mut color);
+                            sphere.albedo = color.into();
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Material");
+                            ui.radio_value(&mut sphere.material, Material::Diffuse, "Diffuse");
+                            ui.radio_value(&mut sphere.material, Material::Metal, "Metal");
+                            ui.radio_value(
+                                &mut sphere.material,
+                                Material::Dielectric,
+                                "Dielectric",
+                            );
+                        });
+                    });
+                }
+            });
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Material {
     Diffuse,
     Metal,
