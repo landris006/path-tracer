@@ -33,16 +33,19 @@ struct HitRecord {
     material: f32,
 }
 
+struct Settings {
+  samplesPerPixel: u32,
+  maxBounces: u32,
+  tMin: f32,
+  tMax: f32,
+}
+
 @group(0) @binding(0) var outputTex: texture_storage_2d<rgba8unorm, write>;
 @group(0) @binding(1) var<uniform> camera: Camera;
 @group(0) @binding(2) var<storage, read> spheres: array<Sphere>;
 @group(0) @binding(3) var<uniform> time: u32;
 @group(0) @binding(4) var skyTexture: texture_2d<f32>;
-
-const T_MIN: f32 = 0.001;
-const T_MAX: f32 = 1000.0;
-const MAX_DEPTH: u32 = 30u;
-const SAMPLE_SIZE: u32 = 4u;
+@group(0) @binding(5) var<uniform> settings: Settings;
 
 @compute @workgroup_size(16, 16)
 fn main(@builtin(global_invocation_id) threadId: vec3<u32>) {
@@ -73,7 +76,7 @@ fn main(@builtin(global_invocation_id) threadId: vec3<u32>) {
     let pixelLocation: vec3<f32> = pixel00Location + f32(threadId.x) * pixelDeltaU + f32(threadId.y) * pixelDeltaV;
 
     var color: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
-    for (var i = 0u; i < SAMPLE_SIZE; i = i + 1u) {
+    for (var i = 0u; i < settings.samplesPerPixel; i = i + 1u) {
         let px: f32 = -0.5 + hybridTaus(&randomState).value;
         let py: f32 = -0.5 + hybridTaus(&randomState).value;
 
@@ -85,7 +88,7 @@ fn main(@builtin(global_invocation_id) threadId: vec3<u32>) {
         color = color + rayColor(ray, &randomState);
     }
 
-    color = color / f32(SAMPLE_SIZE);
+    color = color / f32(settings.samplesPerPixel);
 
     let fragColor: vec4<f32> = vec4<f32>(color, 1.0);
     textureStore(outputTex, vec2<i32>(threadId.xy), fragColor);
@@ -97,7 +100,7 @@ fn rayColor(initialRay: Ray, randomState: ptr<function, vec4<u32>>) -> vec3<f32>
     let randomSeed = hybridTaus(randomState).value;
 
     var currentRay: Ray = initialRay;
-    for (var i = 0u; i < MAX_DEPTH; i = i + 1u) {
+    for (var i = 0u; i < settings.maxBounces; i = i + 1u) {
         numberOfBounces = numberOfBounces + 1u;
         let hitRecord: HitRecord = hitScene(currentRay);
 
@@ -225,11 +228,11 @@ fn hitSphere(ray: Ray, sphere: Sphere) -> HitRecord {
     }
 
     var root = (-b - sqrt(discriminant)) / (2.0 * a);
-    if root <= T_MIN || root >= T_MAX {
+    if root <= settings.tMin || root >= settings.tMax {
         root = (-b + sqrt(discriminant)) / (2.0 * a);
     }
 
-    if root <= T_MIN || root >= T_MAX {
+    if root <= settings.tMin || root >= settings.tMax {
         return hitRecord;
     }
 

@@ -14,29 +14,9 @@ use crate::{
 
 const MAX_NUMBER_OF_SAMPLES: u32 = 256;
 
-struct ProgressiveRendering {
-    sample_size: u32,
-    sample_size_while_moving: u32,
-    buffer: Buffer,
-    ready_samples: u32,
-    output_textures: [Texture; MAX_NUMBER_OF_SAMPLES as usize],
-}
-
-impl ProgressiveRendering {
-    fn get_sample_size(&self, is_moving: bool) -> u32 {
-        if is_moving {
-            self.sample_size_while_moving
-        } else {
-            u32::min(self.sample_size, self.ready_samples)
-        }
-    }
-
-    fn increment_ready_samples(&mut self) {
-        self.ready_samples = u32::min(self.ready_samples + 1, self.sample_size);
-    }
-}
-
 pub struct Renderer {
+    settings: Settings,
+    settings_buffer: Buffer,
     compute_pipeline: wgpu::ComputePipeline,
     compute_bind_group: wgpu::BindGroup,
 
@@ -119,6 +99,17 @@ impl Renderer {
                         },
                         count: None,
                     },
+                    // Settings
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 5,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
                 ],
             });
 
@@ -176,6 +167,13 @@ impl Renderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
+        let settings_buffer = device.create_buffer(&BufferDescriptor {
+            mapped_at_creation: false,
+            size: std::mem::size_of::<Settings>() as u64,
+            label: None,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
         let sky_texture_view = skydome_texture.create_view(&TextureViewDescriptor::default());
 
         let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -201,6 +199,10 @@ impl Renderer {
                 wgpu::BindGroupEntry {
                     binding: 4,
                     resource: wgpu::BindingResource::TextureView(&sky_texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: settings_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -326,8 +328,15 @@ impl Renderer {
         });
 
         Renderer {
+            settings: Settings {
+                samples_per_pixel: 4,
+                max_bounces: 32,
+                t_min: 0.0001,
+                t_max: 1000.0,
+            },
+            settings_buffer,
             progressive_rendering: ProgressiveRendering {
-                sample_size: MAX_NUMBER_OF_SAMPLES,
+                sample_size: 4,
                 sample_size_while_moving: 4,
                 ready_samples: 0,
                 buffer: progressive_rendering_samples_buffer,
@@ -348,28 +357,42 @@ impl Renderer {
         egui::Window::new("Renderer settings")
             .resizable(true)
             .show(&platform.context(), |ui| {
-                ui.add(egui::Label::new("Progressive rendering"));
-                ui.add(
-                    egui::Slider::new(
-                        &mut self.progressive_rendering.sample_size,
-                        1..=MAX_NUMBER_OF_SAMPLES,
-                    )
-                    .text("samples"),
-                );
+                ui.collapsing("General", |ui| {
+                    ui.add(
+                        egui::Slider::new(&mut self.settings.samples_per_pixel, 1..=256)
+                            .text("samples per pixel"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut self.settings.max_bounces, 1..=256)
+                            .text("max bounces"),
+                    );
+                    ui.add(egui::Slider::new(&mut self.settings.t_min, 0.0..=1.0).text("t_min"));
+                    ui.add(egui::Slider::new(&mut self.settings.t_max, 1.0..=9000.0).text("t_max"));
+                });
 
-                ui.add(egui::Label::new(format!(
-                    "Samples used: {}/{}",
-                    self.progressive_rendering.get_sample_size(is_moving),
-                    MAX_NUMBER_OF_SAMPLES
-                )));
+                ui.collapsing("Progressive rendering", |ui| {
+                    ui.add(
+                        egui::Slider::new(
+                            &mut self.progressive_rendering.sample_size,
+                            1..=MAX_NUMBER_OF_SAMPLES,
+                        )
+                        .text("samples"),
+                    );
 
-                ui.add(
-                    egui::Slider::new(
-                        &mut self.progressive_rendering.sample_size_while_moving,
-                        1..=MAX_NUMBER_OF_SAMPLES,
-                    )
-                    .text("samples while moving"),
-                );
+                    ui.add(egui::Label::new(format!(
+                        "Samples used: {}/{}",
+                        self.progressive_rendering.get_sample_size(is_moving),
+                        MAX_NUMBER_OF_SAMPLES
+                    )));
+
+                    ui.add(
+                        egui::Slider::new(
+                            &mut self.progressive_rendering.sample_size_while_moving,
+                            1..=MAX_NUMBER_OF_SAMPLES,
+                        )
+                        .text("samples while moving"),
+                    );
+                });
             });
     }
 
@@ -437,6 +460,12 @@ impl Renderer {
                 .progressive_rendering
                 .get_sample_size(scene.camera.moved_recently())]),
         );
+
+        queue.write_buffer(
+            &self.settings_buffer,
+            0,
+            bytemuck::cast_slice(&[self.settings]),
+        );
     }
 
     pub fn render(
@@ -491,6 +520,37 @@ impl Renderer {
         drop(render_pass);
 
         Ok(())
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct Settings {
+    samples_per_pixel: u32,
+    max_bounces: u32,
+    t_min: f32,
+    t_max: f32,
+}
+
+struct ProgressiveRendering {
+    sample_size: u32,
+    sample_size_while_moving: u32,
+    buffer: Buffer,
+    ready_samples: u32,
+    output_textures: [Texture; MAX_NUMBER_OF_SAMPLES as usize],
+}
+
+impl ProgressiveRendering {
+    fn get_sample_size(&self, is_moving: bool) -> u32 {
+        if is_moving {
+            self.sample_size_while_moving
+        } else {
+            u32::min(self.sample_size, self.ready_samples)
+        }
+    }
+
+    fn increment_ready_samples(&mut self) {
+        self.ready_samples = u32::min(self.ready_samples + 1, self.sample_size);
     }
 }
 

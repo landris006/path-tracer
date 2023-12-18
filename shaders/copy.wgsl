@@ -28,6 +28,7 @@ var<uniform> progressive_rendering_samples: u32;
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var color = vec4<f32>(0.0);
 
+    // TODO: maybe do averaging in compute shader?
     for (var i = 0u; i < progressive_rendering_samples; i = i + 1u) {
         color = color + textureSample(textures[i], texture_sampler, in.tex_coord);
     }
