@@ -1,4 +1,4 @@
-use std::{rc::Rc, time::Instant};
+use std::time::Instant;
 
 use cgmath::Vector3;
 
@@ -148,11 +148,7 @@ impl App {
         ];
 
         let ui = Ui::new(&window, &device, surface_format);
-        let scene = Scene {
-            camera,
-            spheres,
-            selected_sphere: None,
-        };
+        let scene = Scene::new(spheres, camera);
 
         Self {
             surface,
@@ -235,6 +231,7 @@ impl App {
 
         self.camera_controller
             .update_camera(&mut self.scene.camera, delta.as_secs_f32());
+        self.scene.update();
     }
 
     pub fn ui_input(&mut self, event: &Event<CustomEvent>) {
@@ -293,9 +290,28 @@ impl App {
                 .hit_closest_sphere(&self.cursor_ray, 0.001, 1000.0);
 
             if let Some(HitRecord { sphere, .. }) = closest_hit {
-                self.scene.selected_sphere = Some(*sphere.uuid());
+                if sphere.material == Material::Gizmo {
+                    return;
+                }
+
+                let mut gizmo = Sphere::new(SphereDescriptor {
+                    center: sphere.center,
+                    radius: sphere.radius + 0.01,
+                    albedo: Vector3::new(1.0, 0.6, 0.0),
+                    material: Material::Gizmo,
+                });
+                gizmo.label = Some("selected_sphere_gizmo".to_string());
+
+                self.scene.selected_sphere = Some(sphere.uuid);
+                self.scene
+                    .spheres
+                    .retain(|s| s.label != Some("selected_sphere_gizmo".to_string()));
+                self.scene.spheres.push(gizmo);
             } else {
                 self.scene.selected_sphere = None;
+                self.scene
+                    .spheres
+                    .retain(|s| s.label != Some("selected_sphere_gizmo".to_string()));
             }
         }
     }

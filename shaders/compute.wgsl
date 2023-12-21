@@ -100,13 +100,13 @@ fn main(@builtin(global_invocation_id) threadId: vec3<u32>) {
 }
 
 fn rayColor(initialRay: Ray, randomState: ptr<function, vec4<u32>>) -> vec3<f32> {
-    var numberOfBounces: u32 = 0u;
     var color = vec3<f32>(1.0, 1.0, 1.0);
     let randomSeed = hybridTaus(randomState).value;
 
+    var correction: u32 = 0u;
+
     var currentRay: Ray = initialRay;
-    for (var i = 0u; i < settings.depth; i = i + 1u) {
-        numberOfBounces = numberOfBounces + 1u;
+    for (var i = 0u; i < settings.depth + correction; i = i + 1u) {
         let hitRecord: HitRecord = hitScene(currentRay);
 
         if !hitRecord.hit {
@@ -122,6 +122,8 @@ fn rayColor(initialRay: Ray, randomState: ptr<function, vec4<u32>>) -> vec3<f32>
                 if dot(bounceDir, hitRecord.normal) <= 0.0 {
                     return color * hitRecord.attenuation * getBackgroundColor(currentRay);
                 }
+
+                color = color * hitRecord.attenuation;
                 break;
             }
             // Metal
@@ -130,6 +132,8 @@ fn rayColor(initialRay: Ray, randomState: ptr<function, vec4<u32>>) -> vec3<f32>
                 if dot(bounceDir, hitRecord.normal) <= 0.0 {
                     return color * hitRecord.attenuation * getBackgroundColor(currentRay);
                 }
+
+                color = color * hitRecord.attenuation;
                 break;
             }
             // Dielectric
@@ -147,16 +151,27 @@ fn rayColor(initialRay: Ray, randomState: ptr<function, vec4<u32>>) -> vec3<f32>
                     bounceDir = refract(dir, hitRecord.normal, refractionIndex);
                 }
 
+                color = color * hitRecord.attenuation;
+                break;
+            }
+            // Gizmo
+            case 3u: {
+                let dot = dot(initialRay.direction, hitRecord.normal);
+                if i == 0u && dot <= 0.2 && dot >= -0.2 {
+                    return hitRecord.attenuation;
+                }
+                bounceDir = dir;
+                correction = correction + 1u;
                 break;
             }
             default: {
                 bounceDir = scatter(dir, hitRecord.normal, randomSeed);
+                color = color * hitRecord.attenuation;
                 break;
             }
         }
 
         currentRay = Ray(hitRecord.p, bounceDir);
-        color = color * hitRecord.attenuation;
     }
 
     return color * getBackgroundColor(currentRay);
@@ -244,6 +259,13 @@ fn hitSphere(ray: Ray, sphere: Sphere) -> HitRecord {
     let outwardNormal: vec3<f32> = (hitRecord.p - sphere.center) / sphere.radius;
     hitRecord.frontFace = dot(ray.direction, outwardNormal) < 0.0;
     hitRecord.normal = select(-outwardNormal, outwardNormal, hitRecord.frontFace);
+
+    if u32(sphere.material) == 3u {
+        let dot = dot(ray.direction, hitRecord.normal);
+        if !(dot <= 0.2 && dot >= -0.2) {
+            hitRecord.hit = false;
+        }
+    }
 
     return hitRecord;
 }

@@ -15,6 +15,14 @@ pub struct Scene {
 }
 
 impl Scene {
+    pub fn new(spheres: Vec<Sphere>, camera: Camera) -> Self {
+        Self {
+            camera,
+            spheres,
+            selected_sphere: None,
+        }
+    }
+
     pub fn render_ui(&mut self, platform: &mut Platform) {
         egui::Window::new("Scene")
             .resizable(true)
@@ -81,11 +89,7 @@ impl Scene {
             });
 
         if let Some(selected_sphere) = self.selected_sphere {
-            if let Some(sphere) = self
-                .spheres
-                .iter_mut()
-                .find(|s| s.uuid() == &selected_sphere)
-            {
+            if let Some(sphere) = self.spheres.iter_mut().find(|s| s.uuid == selected_sphere) {
                 egui::Window::new("Selected Sphere").resizable(true).show(
                     &platform.context(),
                     |ui| {
@@ -138,6 +142,18 @@ impl Scene {
 
         closest_hit
     }
+
+    pub fn update(&mut self) -> Option<()> {
+        let selected_sphere = self.selected_sphere?;
+        let mut spheres_iter = self.spheres.iter_mut();
+        let sphere = spheres_iter.find(|s| s.uuid == selected_sphere)?;
+        let gizmo = spheres_iter.find(|s| s.label == Some("selected_sphere_gizmo".to_string()))?;
+
+        gizmo.center = sphere.center;
+        gizmo.radius = sphere.radius + 0.01;
+
+        Some(())
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -145,6 +161,7 @@ pub enum Material {
     Diffuse,
     Metal,
     Dielectric,
+    Gizmo,
 }
 
 pub struct SphereDescriptor {
@@ -156,7 +173,8 @@ pub struct SphereDescriptor {
 
 #[derive(Debug)]
 pub struct Sphere {
-    uuid: uuid::Uuid,
+    pub uuid: uuid::Uuid,
+    pub label: Option<String>,
     pub center: Vector3<f32>,
     pub radius: f32,
     pub albedo: Vector3<f32>,
@@ -167,15 +185,12 @@ impl Sphere {
     pub fn new(sphere_descriptor: SphereDescriptor) -> Self {
         Self {
             uuid: Uuid::new_v4(),
+            label: None,
             center: sphere_descriptor.center,
             radius: sphere_descriptor.radius,
             albedo: sphere_descriptor.albedo,
             material: sphere_descriptor.material,
         }
-    }
-
-    pub fn uuid(&self) -> &Uuid {
-        &self.uuid
     }
 
     pub fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
@@ -238,6 +253,7 @@ impl From<&Sphere> for SphereBuffer {
                 Material::Diffuse => 0.0,
                 Material::Metal => 1.0,
                 Material::Dielectric => 2.0,
+                Material::Gizmo => 3.0,
             },
         }
     }
