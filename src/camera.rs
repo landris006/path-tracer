@@ -2,6 +2,7 @@ use std::time::Instant;
 
 use cgmath::{InnerSpace, Vector2, Vector3, Zero};
 use winit::{
+    dpi::{PhysicalPosition, PhysicalSize},
     event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent},
     window::{CursorGrabMode, Window},
 };
@@ -15,6 +16,18 @@ pub struct Camera {
     pub focal_length: f32,
     pub vfov: f32,
     last_move_time: Instant,
+}
+
+#[derive(Debug)]
+pub struct Ray {
+    pub origin: Vector3<f32>,
+    pub direction: Vector3<f32>,
+}
+
+impl Ray {
+    pub fn at(&self, t: f32) -> Vector3<f32> {
+        self.origin + self.direction * t
+    }
 }
 
 impl Camera {
@@ -32,6 +45,28 @@ impl Camera {
 
     pub fn moved_recently(&self) -> bool {
         self.last_move_time.elapsed().as_secs_f32() < 0.2
+    }
+
+    pub fn screen_pos_to_ray(
+        &self,
+        position: PhysicalPosition<f64>,
+        screen_size: PhysicalSize<u32>,
+    ) -> Ray {
+        let aspect_ratio = screen_size.width as f32 / screen_size.height as f32;
+        let fov_adjustment = (self.vfov.to_radians() / 2.0).tan();
+        let screen_x = (((position.x as f32 / screen_size.width as f32) * 2.0 - 1.0)
+            * fov_adjustment
+            * aspect_ratio)
+            * self.focal_length;
+        let screen_y = (1.0 - (position.y as f32 / screen_size.height as f32) * 2.0)
+            * fov_adjustment
+            * self.focal_length;
+
+        let direction = self.forward + self.right * screen_x + self.up * screen_y;
+        Ray {
+            origin: self.origin,
+            direction: direction.normalize(),
+        }
     }
 }
 

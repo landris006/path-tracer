@@ -48,6 +48,8 @@ pub async fn run() {
     event_loop.run(move |event, _, control_flow| {
         app.ui_input(&event);
 
+        app.input(&event);
+
         match event {
             Event::RedrawRequested(window_id) if window_id == app.window().id() => {
                 app.update();
@@ -72,29 +74,19 @@ pub async fn run() {
             Event::WindowEvent {
                 ref event,
                 window_id,
-            } if window_id == app.window().id() => {
-                app.input(event);
-
-                match event {
-                    WindowEvent::Resized(physical_size) => {
-                        app.resize(*physical_size);
-                    }
-                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        app.resize(**new_inner_size);
-                    }
-                    WindowEvent::CloseRequested
-                    | WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                virtual_keycode: Some(VirtualKeyCode::Escape),
-                                ..
-                            },
-                        ..
-                    } => *control_flow = ControlFlow::Exit,
-                    _ => {}
-                }
-            }
+            } if window_id == app.window().id() => match event {
+                WindowEvent::CloseRequested
+                | WindowEvent::KeyboardInput {
+                    input:
+                        KeyboardInput {
+                            state: ElementState::Pressed,
+                            virtual_keycode: Some(VirtualKeyCode::Escape),
+                            ..
+                        },
+                    ..
+                } => *control_flow = ControlFlow::Exit,
+                _ => {}
+            },
             _ => {}
         }
     });

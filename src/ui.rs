@@ -75,4 +75,8 @@ impl Ui {
     pub fn handle_event(&mut self, event: &Event<CustomEvent>) {
         self.platform.handle_event(event);
     }
+
+    pub fn contains_mouse(&self) -> bool {
+        self.platform.context().is_pointer_over_area()
+    }
 }

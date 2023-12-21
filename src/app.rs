@@ -1,16 +1,17 @@
-use std::time::Instant;
+use std::{rc::Rc, time::Instant};
 
 use cgmath::Vector3;
 
 use winit::{
-    event::{Event, WindowEvent},
+    dpi::PhysicalPosition,
+    event::{ElementState, Event, MouseButton, WindowEvent},
     window::Window,
 };
 
 use crate::{
-    camera::{Camera, CameraController},
+    camera::{Camera, CameraController, Ray},
     renderer::Renderer,
-    scene::{Material, Scene, Sphere},
+    scene::{HitRecord, Material, Scene, Sphere, SphereDescriptor},
     ui::Ui,
     CustomEvent,
 };
@@ -23,6 +24,7 @@ pub struct App {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     window_size: winit::dpi::PhysicalSize<u32>,
+    cursor_ray: Ray,
 
     scene: Scene,
     camera_controller: CameraController,
@@ -107,46 +109,50 @@ impl App {
         let camera = Camera::new();
 
         let spheres = vec![
-            Sphere {
+            Sphere::new(SphereDescriptor {
                 center: Vector3::new(0.0, 0.0, -1.0),
                 radius: 0.5,
                 albedo: Vector3::new(0.8, 0.3, 0.3),
                 material: Material::Diffuse,
-            },
-            Sphere {
+            }),
+            Sphere::new(SphereDescriptor {
                 center: Vector3::new(1.0, 0.0, -1.0),
                 radius: 0.5,
                 albedo: Vector3::new(1.0, 1.0, 1.0),
                 material: Material::Dielectric,
-            },
-            Sphere {
+            }),
+            Sphere::new(SphereDescriptor {
                 center: Vector3::new(-1.0, 0.0, -1.0),
                 radius: 0.5,
                 albedo: Vector3::new(1.0, 1.0, 1.0),
                 material: Material::Dielectric,
-            },
-            Sphere {
+            }),
+            Sphere::new(SphereDescriptor {
                 center: Vector3::new(0.0, 1.0, -1.0),
                 radius: 0.5,
                 albedo: Vector3::new(0.8, 0.3, 0.3),
                 material: Material::Diffuse,
-            },
-            Sphere {
+            }),
+            Sphere::new(SphereDescriptor {
                 center: Vector3::new(0.0, 2.0, -1.0),
                 radius: 0.5,
                 albedo: Vector3::new(0.8, 0.3, 0.3),
                 material: Material::Metal,
-            },
-            Sphere {
+            }),
+            Sphere::new(SphereDescriptor {
                 center: Vector3::new(0.0, -100.5, -1.0),
                 radius: 100.0,
                 albedo: Vector3::new(0.8, 0.8, 0.0),
                 material: Material::Diffuse,
-            },
+            }),
         ];
 
         let ui = Ui::new(&window, &device, surface_format);
-        let scene = Scene { camera, spheres };
+        let scene = Scene {
+            camera,
+            spheres,
+            selected_sphere: None,
+        };
 
         Self {
             surface,
@@ -160,6 +166,10 @@ impl App {
             start_time: Instant::now(),
             last_frame_time: Instant::now(),
             frame_times: Vec::new(),
+            cursor_ray: Ray {
+                origin: Vector3::new(0.0, 0.0, 0.0),
+                direction: Vector3::new(0.0, 0.0, -1.0),
+            },
             renderer,
             window,
         }
@@ -268,7 +278,62 @@ impl App {
         }
     }
 
-    pub fn input(&mut self, event: &WindowEvent) {
-        self.camera_controller.input(event, &mut self.window);
+    fn handle_pointer_move(&mut self, position: PhysicalPosition<f64>) {
+        let ray = self
+            .scene
+            .camera
+            .screen_pos_to_ray(position, self.window_size);
+        self.cursor_ray = ray;
+    }
+
+    fn handle_pointer_input(&mut self, button: MouseButton, state: ElementState) {
+        if button == MouseButton::Left && state == ElementState::Pressed {
+            let closest_hit = self
+                .scene
+                .hit_closest_sphere(&self.cursor_ray, 0.001, 1000.0);
+
+            if let Some(HitRecord { sphere, .. }) = closest_hit {
+                self.scene.selected_sphere = Some(*sphere.uuid());
+            } else {
+                self.scene.selected_sphere = None;
+            }
+        }
+    }
+
+    pub fn input(&mut self, event: &Event<'_, CustomEvent>) {
+        if self.ui.contains_mouse() {
+            return;
+        }
+
+        match event {
+            Event::WindowEvent {
+                ref event,
+                window_id,
+            } if *window_id == self.window.id() => {
+                self.camera_controller.input(event, &mut self.window);
+
+                match event {
+                    WindowEvent::Resized(physical_size) => {
+                        self.resize(*physical_size);
+                    }
+                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                        self.resize(**new_inner_size);
+                    }
+                    WindowEvent::CursorMoved { position, .. } => {
+                        self.handle_pointer_move(*position);
+                    }
+                    WindowEvent::MouseInput { button, state, .. } => {
+                        self.handle_pointer_input(*button, *state);
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+
+        // if let WindowEvent::MouseInput { button, state, .. } = event {
+        //     self.ui
+        //         .handle_pointer_input(self.window_size, *button, *state);
+        // }
     }
 }
