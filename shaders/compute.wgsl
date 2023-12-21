@@ -5,13 +5,6 @@ struct Ray {
     direction: vec3<f32>,
 };
 
-struct Sphere {
-  center: vec3<f32>,
-  radius: f32,
-  albedo: vec3<f32>,
-  material: f32,
-}
-
 struct Camera {
     origin: vec3<f32>,
     focalLength: f32,
@@ -40,9 +33,21 @@ struct Settings {
   tMax: f32,
 }
 
+struct Sphere {
+  center: vec3<f32>,
+  radius: f32,
+  albedo: vec3<f32>,
+  material: f32,
+}
+
+struct SphereData {
+  sphereCount: u32,
+  spheres: array<Sphere>,
+}
+
 @group(0) @binding(0) var outputTex: texture_storage_2d<rgba8unorm, write>;
 @group(0) @binding(1) var<uniform> camera: Camera;
-@group(0) @binding(2) var<storage, read> spheres: array<Sphere>;
+@group(0) @binding(2) var<storage, read> sphereData: SphereData;
 @group(0) @binding(3) var<uniform> time: u32;
 @group(0) @binding(4) var skyTexture: texture_2d<f32>;
 @group(0) @binding(5) var<uniform> settings: Settings;
@@ -186,8 +191,8 @@ fn hitScene(ray: Ray) -> HitRecord {
         0.0
     );
 
-    for (var i = 0u; i < arrayLength(&spheres); i = i + 1u) {
-        let sphere = spheres[i];
+    for (var i = 0u; i < sphereData.sphereCount; i = i + 1u) {
+        let sphere = sphereData.spheres[i];
         let objectHitRecord = hitSphere(ray, sphere);
 
         if !objectHitRecord.hit {

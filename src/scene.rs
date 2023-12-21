@@ -1,5 +1,8 @@
+use std::{cmp, usize};
+
+use crate::MAX_NUMBER_OF_SPHERES;
+use bytemuck::Zeroable;
 use cgmath::Vector3;
-use egui::Color32;
 use egui_winit_platform::Platform;
 
 use crate::camera::Camera;
@@ -14,6 +17,31 @@ impl Scene {
         egui::Window::new("Scene")
             .resizable(true)
             .show(&platform.context(), |ui| {
+                ui.horizontal(|ui| {
+                    if ui
+                        .button("Add Sphere")
+                        .on_hover_text("Add a sphere to the scene")
+                        .clicked()
+                    {
+                        self.spheres.push(Sphere {
+                            center: Vector3::new(0.0, 0.0, 0.0),
+                            radius: 1.0,
+                            albedo: Vector3::new(0.5, 0.5, 0.5),
+                            material: Material::Diffuse,
+                        });
+                    }
+
+                    if ui
+                        .button("Remove Sphere")
+                        .on_hover_text("Remove the last sphere from the scene")
+                        .clicked()
+                    {
+                        self.spheres.pop();
+                    }
+                });
+
+                ui.separator();
+
                 for (i, sphere) in self.spheres.iter_mut().enumerate() {
                     ui.collapsing(format!("Sphere {}", i), |ui| {
                         ui.horizontal(|ui| {
@@ -86,6 +114,33 @@ impl From<&Sphere> for SphereBuffer {
                 Material::Metal => 1.0,
                 Material::Dielectric => 2.0,
             },
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct SphereDataBuffer {
+    sphere_count: u32,
+    _padding: [u32; 3],
+    spheres: [SphereBuffer; MAX_NUMBER_OF_SPHERES as _],
+}
+
+impl From<&Vec<Sphere>> for SphereDataBuffer {
+    fn from(spheres: &Vec<Sphere>) -> Self {
+        let mut sphere_buffer = [SphereBuffer::zeroed(); MAX_NUMBER_OF_SPHERES as _];
+        for (i, sphere) in spheres
+            .iter()
+            .take(MAX_NUMBER_OF_SPHERES as usize)
+            .enumerate()
+        {
+            sphere_buffer[i] = SphereBuffer::from(sphere);
+        }
+
+        Self {
+            sphere_count: cmp::min(spheres.len(), MAX_NUMBER_OF_SPHERES as usize) as u32,
+            _padding: [0; 3],
+            spheres: sphere_buffer,
         }
     }
 }

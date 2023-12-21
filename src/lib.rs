@@ -17,6 +17,7 @@ mod ui;
 
 const WINDOW_WIDTH: u32 = 1920;
 const WINDOW_HEIGHT: u32 = 1080;
+const MAX_NUMBER_OF_SPHERES: u32 = 256;
 
 pub enum CustomEvent {
     RequestRedraw,

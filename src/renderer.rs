@@ -1,5 +1,6 @@
 use std::{num::NonZeroU32, path::Path, time::Instant};
 
+use crate::{scene::SphereDataBuffer, MAX_NUMBER_OF_SPHERES};
 use egui_winit_platform::Platform;
 use wgpu::{
     Buffer, BufferDescriptor, CommandEncoder, Device, Extent3d, Queue, SamplerBindingType,
@@ -27,7 +28,7 @@ pub struct Renderer {
 
     time_buffer: wgpu::Buffer,
     camera_buffer: Buffer,
-    sphere_buffer: Buffer,
+    sphere_data_buffer: Buffer,
 
     progressive_rendering: ProgressiveRendering,
 }
@@ -145,10 +146,9 @@ impl Renderer {
         let skydome_texture =
             texture::load_hdr_texture("assets/skydome.hdr", device, queue).unwrap();
 
-        let sphere_buffer = device.create_buffer(&BufferDescriptor {
+        let sphere_data_buffer = device.create_buffer(&BufferDescriptor {
             mapped_at_creation: false,
-            // TODO: memory
-            size: std::mem::size_of::<SphereBuffer>() as u64 * 6,
+            size: std::mem::size_of::<SphereDataBuffer>() as u64,
             label: None,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
@@ -190,7 +190,7 @@ impl Renderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: sphere_buffer.as_entire_binding(),
+                    resource: sphere_data_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
@@ -349,7 +349,7 @@ impl Renderer {
             camera_buffer,
             time_buffer,
             start_time: Instant::now(),
-            sphere_buffer,
+            sphere_data_buffer,
         }
     }
 
@@ -439,15 +439,9 @@ impl Renderer {
         );
 
         queue.write_buffer(
-            &self.sphere_buffer,
+            &self.sphere_data_buffer,
             0,
-            bytemuck::cast_slice(
-                &scene
-                    .spheres
-                    .iter()
-                    .map(SphereBuffer::from)
-                    .collect::<Vec<_>>(),
-            ),
+            bytemuck::cast_slice(&[SphereDataBuffer::from(&scene.spheres)]),
         );
 
         queue.write_buffer(
