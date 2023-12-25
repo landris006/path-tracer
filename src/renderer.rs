@@ -1,17 +1,13 @@
 use std::{num::NonZeroU32, path::Path, time::Instant};
 
-use crate::{scene::SphereDataBuffer, MAX_NUMBER_OF_SPHERES};
+use crate::scene::SphereDataBuffer;
 use egui_winit_platform::Platform;
 use wgpu::{
     Buffer, BufferDescriptor, CommandEncoder, Device, Extent3d, Queue, SamplerBindingType,
     SurfaceConfiguration, SurfaceTexture, Texture, TextureViewDescriptor,
 };
 
-use crate::{
-    camera::CameraBuffer,
-    scene::{Scene, SphereBuffer},
-    texture, WINDOW_HEIGHT, WINDOW_WIDTH,
-};
+use crate::{camera::CameraBuffer, scene::Scene, texture, WINDOW_HEIGHT, WINDOW_WIDTH};
 
 const MAX_NUMBER_OF_SAMPLES: u32 = 256;
 
@@ -507,8 +503,6 @@ impl Renderer {
         render_pass.set_bind_group(0, &self.copy_bind_group, &[]);
         render_pass.set_pipeline(&self.copy_pipeline);
         render_pass.draw(0..3, 0..2);
-
-        drop(render_pass);
 
         Ok(())
     }

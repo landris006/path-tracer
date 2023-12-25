@@ -3,8 +3,6 @@ use egui_winit_platform::{Platform, PlatformDescriptor};
 use wgpu::{CommandEncoder, Device, Queue, SurfaceTexture, TextureFormat};
 use winit::{event::Event, window::Window};
 
-use crate::CustomEvent;
-
 pub struct Ui {
     platform: Platform,
     render_pass: RenderPass,
@@ -72,7 +70,7 @@ impl Ui {
         &mut self.platform
     }
 
-    pub fn handle_event(&mut self, event: &Event<CustomEvent>) {
+    pub fn handle_event(&mut self, event: &Event<()>) {
         self.platform.handle_event(event);
     }
 

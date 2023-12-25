@@ -4,7 +4,8 @@ use cgmath::Vector3;
 
 use winit::{
     dpi::PhysicalPosition,
-    event::{ElementState, Event, MouseButton, WindowEvent},
+    event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent},
+    event_loop::{ControlFlow, EventLoop},
     window::Window,
 };
 
@@ -13,7 +14,6 @@ use crate::{
     renderer::Renderer,
     scene::{HitRecord, Material, Scene, Sphere, SphereDescriptor},
     ui::Ui,
-    CustomEvent,
 };
 
 pub struct App {
@@ -234,7 +234,7 @@ impl App {
         self.scene.update();
     }
 
-    pub fn ui_input(&mut self, event: &Event<CustomEvent>) {
+    pub fn ui_input(&mut self, event: &Event<()>) {
         self.ui.handle_event(event);
     }
 
@@ -316,7 +316,7 @@ impl App {
         }
     }
 
-    pub fn input(&mut self, event: &Event<'_, CustomEvent>) {
+    pub fn input(&mut self, event: &Event<'_, ()>) {
         if self.ui.contains_mouse() {
             return;
         }
@@ -346,10 +346,53 @@ impl App {
             }
             _ => {}
         }
+    }
 
-        // if let WindowEvent::MouseInput { button, state, .. } = event {
-        //     self.ui
-        //         .handle_pointer_input(self.window_size, *button, *state);
-        // }
+    pub fn run(mut self, event_loop: EventLoop<()>) {
+        event_loop.run(move |event, _, control_flow| {
+            self.ui_input(&event);
+
+            self.input(&event);
+
+            match event {
+                Event::RedrawRequested(window_id) if window_id == self.window().id() => {
+                    self.update();
+
+                    match self.render() {
+                        Ok(_) => {}
+                        Err(wgpu::SurfaceError::Lost) => {
+                            eprintln!("Lost surface, resizing");
+                            self.resize(self.window_size());
+                        }
+                        Err(wgpu::SurfaceError::OutOfMemory) => {
+                            eprintln!("Out of memory, exiting");
+                            *control_flow = ControlFlow::Exit;
+                        }
+                        Err(e) => eprintln!("{:?}", e),
+                    }
+                }
+                Event::MainEventsCleared => {
+                    self.window().request_redraw();
+                }
+
+                Event::WindowEvent {
+                    ref event,
+                    window_id,
+                } if window_id == self.window().id() => match event {
+                    WindowEvent::CloseRequested
+                    | WindowEvent::KeyboardInput {
+                        input:
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::Escape),
+                                ..
+                            },
+                        ..
+                    } => *control_flow = ControlFlow::Exit,
+                    _ => {}
+                },
+                _ => {}
+            }
+        });
     }
 }
