@@ -175,7 +175,8 @@ impl App {
         self.ui
             .begin_new_frame(self.start_time.elapsed().as_secs_f64());
 
-        let avg_frame_time = self.frame_times.iter().sum::<u128>() / self.frame_times.len() as u128;
+        let avg_frame_time =
+            self.frame_times.iter().sum::<u128>() as f64 / self.frame_times.len() as f64;
 
         let platform = self.ui.platform_mut();
 
@@ -183,9 +184,9 @@ impl App {
             .resizable(true)
             .show(&platform.context(), |ui| {
                 ui.add(egui::Label::new(format!(
-                    "Frame time: {}ms ({} FPS)",
+                    "Frame time: {:.2}ms ({:.2} FPS)",
                     avg_frame_time,
-                    1000 / avg_frame_time
+                    1000.0 / avg_frame_time
                 )));
             });
 
@@ -396,3 +397,4 @@ impl App {
         });
     }
 }
+
