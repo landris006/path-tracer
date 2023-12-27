@@ -175,9 +175,9 @@ impl Renderer {
 
         // TODO: maybe load on separate thread
         let hdr_loader = texture::HdrLoader::new(device);
-        let data = std::fs::read("assets/partly_cloudy_sky.hdr").unwrap();
+        let data = std::fs::read("assets/hdri/partly_cloudy_sky.hdr").unwrap();
         let sky_texture =
-            CubeTexture::from_equirectangular_hdri(&hdr_loader, device, queue, &data, 2160)
+            CubeTexture::from_equirectangular_hdri(&hdr_loader, device, queue, &data, 4096)
                 .unwrap();
 
         let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
