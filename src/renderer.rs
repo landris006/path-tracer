@@ -1,6 +1,6 @@
 use std::{num::NonZeroU32, path::Path, time::Instant};
 
-use crate::scene::SphereDataBuffer;
+use crate::{scene::SphereDataBuffer, texture::CubeTexture, utils};
 use egui_winit_platform::Platform;
 use wgpu::{
     Buffer, BufferDescriptor, CommandEncoder, Device, Extent3d, Queue, SamplerBindingType,
@@ -31,7 +31,7 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(device: &Device, queue: &Queue, surface_config: &SurfaceConfiguration) -> Self {
-        let src = load_shader_source(Path::new("shaders"), "compute.wgsl").unwrap();
+        let src = utils::load_shader_source(Path::new("shaders"), "compute.wgsl").unwrap();
         let compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("compute"),
             source: wgpu::ShaderSource::Wgsl(src.into()),
@@ -85,20 +85,27 @@ impl Renderer {
                         },
                         count: None,
                     },
-                    // Skydome texture
+                    // Sky texture
                     wgpu::BindGroupLayoutEntry {
                         binding: 4,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Texture {
                             multisampled: false,
                             sample_type: wgpu::TextureSampleType::Float { filterable: false },
-                            view_dimension: wgpu::TextureViewDimension::D2,
+                            view_dimension: wgpu::TextureViewDimension::Cube,
                         },
+                        count: None,
+                    },
+                    // Sky Texture Sampler
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 5,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Sampler(SamplerBindingType::NonFiltering),
                         count: None,
                     },
                     // Settings
                     wgpu::BindGroupLayoutEntry {
-                        binding: 5,
+                        binding: 6,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
@@ -139,9 +146,6 @@ impl Renderer {
             .map(|texture| texture.create_view(&TextureViewDescriptor::default()))
             .collect::<Vec<_>>();
 
-        let skydome_texture =
-            texture::load_hdr_texture("assets/skydome.hdr", device, queue).unwrap();
-
         let sphere_data_buffer = device.create_buffer(&BufferDescriptor {
             mapped_at_creation: false,
             size: std::mem::size_of::<SphereDataBuffer>() as u64,
@@ -170,7 +174,12 @@ impl Renderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let sky_texture_view = skydome_texture.create_view(&TextureViewDescriptor::default());
+        // TODO: maybe load on separate thread
+        let hdr_loader = texture::HdrLoader::new(device);
+        let data = std::fs::read("assets/partly_cloudy_sky.hdr").unwrap();
+        let sky_texture =
+            CubeTexture::from_equirectangular_hdri(&hdr_loader, device, queue, &data, 2160)
+                .unwrap();
 
         let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
@@ -194,10 +203,14 @@ impl Renderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 4,
-                    resource: wgpu::BindingResource::TextureView(&sky_texture_view),
+                    resource: wgpu::BindingResource::TextureView(&sky_texture.view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 5,
+                    resource: wgpu::BindingResource::Sampler(&sky_texture.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
                     resource: settings_buffer.as_entire_binding(),
                 },
             ],
@@ -216,7 +229,7 @@ impl Renderer {
             entry_point: "main",
         });
 
-        let src = load_shader_source(Path::new("shaders"), "copy.wgsl").unwrap();
+        let src = utils::load_shader_source(Path::new("shaders"), "copy.wgsl").unwrap();
         let copy_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("copy"),
             source: wgpu::ShaderSource::Wgsl(src.into()),
@@ -539,24 +552,3 @@ impl ProgressiveRendering {
     }
 }
 
-fn load_shader_source(shaders_root: &Path, name: &str) -> Result<String, std::io::Error> {
-    let path = std::path::Path::new(shaders_root).join(name);
-    let src = std::fs::read_to_string(path)?
-        .lines()
-        .map(|line| {
-            if line.starts_with("//!include") {
-                let path = line
-                    .split_whitespace()
-                    .nth(1)
-                    .expect("invalid include statement")
-                    .replace('"', "");
-                load_shader_source(&Path::new(shaders_root).join("include"), &path)
-            } else {
-                Ok(line.to_owned())
-            }
-        })
-        .collect::<Result<Vec<_>, _>>()?
-        .join("\n");
-
-    Ok(src)
-}

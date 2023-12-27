@@ -9,6 +9,7 @@ mod renderer;
 mod scene;
 mod texture;
 mod ui;
+mod utils;
 
 const WINDOW_WIDTH: u32 = 1920;
 const WINDOW_HEIGHT: u32 = 1080;

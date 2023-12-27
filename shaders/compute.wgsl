@@ -49,8 +49,9 @@ struct SphereData {
 @group(0) @binding(1) var<uniform> camera: Camera;
 @group(0) @binding(2) var<storage, read> sphereData: SphereData;
 @group(0) @binding(3) var<uniform> time: u32;
-@group(0) @binding(4) var skyTexture: texture_2d<f32>;
-@group(0) @binding(5) var<uniform> settings: Settings;
+@group(0) @binding(4) var skyTexture: texture_cube<f32>;
+@group(0) @binding(5) var skyTextureSampler: sampler;
+@group(0) @binding(6) var<uniform> settings: Settings;
 
 @compute @workgroup_size(16, 16)
 fn main(@builtin(global_invocation_id) threadId: vec3<u32>) {
@@ -178,20 +179,7 @@ fn rayColor(initialRay: Ray, randomState: ptr<function, vec4<u32>>) -> vec3<f32>
 }
 
 fn getBackgroundColor(ray: Ray) -> vec3<f32> {
-    let phi = atan2(ray.direction.z, ray.direction.x);
-    let theta = acos(ray.direction.y);
-
-    let u = (atan2(ray.direction.x, ray.direction.z) + PI) / (2.0 * PI);
-    let v = -ray.direction.y * 0.5 + 0.5;
-
-    let textureDimension: vec2<u32> = textureDimensions(skyTexture);
-    var textureCoordsU32: vec2<u32> = vec2<u32>(
-        u32(u * f32(textureDimension.x - 1u)),
-        u32(v * f32(textureDimension.y - 1u))
-    );
-
-    let bgColor: vec4<f32> = textureLoad(skyTexture, textureCoordsU32, i32(0));
-
+    let bgColor: vec4<f32> = textureSampleLevel(skyTexture, skyTextureSampler, ray.direction, 0.0);
     return bgColor.rgb;
 }
 
