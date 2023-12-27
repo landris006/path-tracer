@@ -111,6 +111,7 @@ fn rayColor(initialRay: Ray, randomState: ptr<function, vec4<u32>>) -> vec3<f32>
         let hitRecord: HitRecord = hitScene(currentRay);
 
         if !hitRecord.hit {
+            color = color * getBackgroundColor(currentRay);
             break;
         }
 
@@ -175,7 +176,7 @@ fn rayColor(initialRay: Ray, randomState: ptr<function, vec4<u32>>) -> vec3<f32>
         currentRay = Ray(hitRecord.p, bounceDir);
     }
 
-    return color * getBackgroundColor(currentRay);
+    return color;
 }
 
 fn getBackgroundColor(ray: Ray) -> vec3<f32> {
