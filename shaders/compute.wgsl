@@ -40,9 +40,25 @@ struct Sphere {
   material: f32,
 }
 
+struct Triangle {
+  v0: vec3<f32>,
+  material: f32,
+  v1: vec3<f32>,
+  _padding1: f32,
+  v2: vec3<f32>,
+  _padding2: f32,
+  albedo: vec3<f32>,
+  _padding3: f32,
+}
+
 struct SphereData {
   sphereCount: u32,
   spheres: array<Sphere>,
+}
+
+struct TriangleData {
+  triangleCount: u32,
+  triangles: array<Triangle>,
 }
 
 @group(0) @binding(0) var outputTex: texture_storage_2d<rgba8unorm, write>;

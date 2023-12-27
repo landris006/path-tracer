@@ -171,53 +171,57 @@ impl App {
         }
     }
 
-    fn setup_ui(&mut self) {
+    fn render_ui(&mut self) {
         self.ui
             .begin_new_frame(self.start_time.elapsed().as_secs_f64());
-
         let avg_frame_time =
             self.frame_times.iter().sum::<u128>() as f64 / self.frame_times.len() as f64;
+        let context = self.ui.platform.borrow().context();
 
-        let platform = self.ui.platform_mut();
-
-        egui::Window::new("Info")
+        egui::panel::SidePanel::left("top_panel")
+            .min_width(200.0)
             .resizable(true)
-            .show(&platform.context(), |ui| {
+            .show(&context, |ui| {
+                ui.heading("Pathtracer");
+                ui.separator();
+
                 ui.add(egui::Label::new(format!(
                     "Frame time: {:.2}ms ({:.2} FPS)",
                     avg_frame_time,
                     1000.0 / avg_frame_time
                 )));
-            });
 
-        egui::Window::new("Camera settings")
-            .default_open(false)
-            .resizable(true)
-            .show(&platform.context(), |ui| {
-                ui.label("Origin");
-                ui.horizontal(|ui| {
-                    ui.add(egui::DragValue::new(&mut self.scene.camera.origin.x).speed(0.1));
-                    ui.add(egui::DragValue::new(&mut self.scene.camera.origin.y).speed(0.1));
-                    ui.add(egui::DragValue::new(&mut self.scene.camera.origin.z).speed(0.1));
-                });
-                ui.label("Look at");
-                ui.horizontal(|ui| {
-                    ui.add(egui::DragValue::new(&mut self.scene.camera.forward.x).speed(0.1));
-                    ui.add(egui::DragValue::new(&mut self.scene.camera.forward.y).speed(0.1));
-                    ui.add(egui::DragValue::new(&mut self.scene.camera.forward.z).speed(0.1));
-                });
-                ui.label("Vertical FOV");
-                ui.add(egui::Slider::new(&mut self.scene.camera.vfov, 0.0..=180.0));
-                ui.label("Speed");
-                ui.add(egui::Slider::new(
-                    &mut self.camera_controller.speed,
-                    0.0..=10.0,
-                ));
-            });
+                ui.separator();
 
-        self.renderer
-            .render_ui(platform, self.scene.camera.moved_recently());
-        self.scene.render_ui(platform);
+                self.renderer
+                    .render_ui(ui, self.scene.camera.moved_recently());
+                self.render_camera_ui(ui);
+                self.scene.render_ui(ui, &context);
+            });
+    }
+
+    fn render_camera_ui(&mut self, ui: &mut egui::Ui) {
+        ui.collapsing("Camera", |ui| {
+            ui.label("Origin");
+            ui.horizontal(|ui| {
+                ui.add(egui::DragValue::new(&mut self.scene.camera.origin.x).speed(0.1));
+                ui.add(egui::DragValue::new(&mut self.scene.camera.origin.y).speed(0.1));
+                ui.add(egui::DragValue::new(&mut self.scene.camera.origin.z).speed(0.1));
+            });
+            ui.label("Look at");
+            ui.horizontal(|ui| {
+                ui.add(egui::DragValue::new(&mut self.scene.camera.forward.x).speed(0.1));
+                ui.add(egui::DragValue::new(&mut self.scene.camera.forward.y).speed(0.1));
+                ui.add(egui::DragValue::new(&mut self.scene.camera.forward.z).speed(0.1));
+            });
+            ui.label("Vertical FOV");
+            ui.add(egui::Slider::new(&mut self.scene.camera.vfov, 0.0..=180.0));
+            ui.label("Speed");
+            ui.add(egui::Slider::new(
+                &mut self.camera_controller.speed,
+                0.0..=10.0,
+            ));
+        });
     }
 
     pub fn update(&mut self) {
@@ -240,7 +244,7 @@ impl App {
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        self.setup_ui();
+        self.render_ui();
 
         let mut output = self.surface.get_current_texture()?;
 

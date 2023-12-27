@@ -1,56 +1,11 @@
 use std::{io::Cursor, path::Path};
 
+use crate::utils;
 use image::{
     codecs::hdr::{HdrDecoder, HdrMetadata},
-    GenericImageView, ImageError, ImageResult,
+    ImageResult,
 };
-use wgpu::{
-    Sampler, SamplerDescriptor, Texture, TextureDescriptor, TextureView, TextureViewDescriptor,
-};
-
-use crate::utils;
-
-pub fn load_hdr_texture(
-    path: &str,
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-) -> Result<Texture, ImageError> {
-    let img = image::open(path)?;
-    let (width, height) = img.dimensions();
-
-    let size = wgpu::Extent3d {
-        width,
-        height,
-        depth_or_array_layers: 1,
-    };
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("HDR Texture"),
-        size,
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-        view_formats: &[],
-    });
-    queue.write_texture(
-        wgpu::ImageCopyTexture {
-            texture: &texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        &img.to_rgba8().into_raw(),
-        wgpu::ImageDataLayout {
-            offset: 0,
-            bytes_per_row: Some(4 * width),
-            rows_per_image: Some(height),
-        },
-        size,
-    );
-
-    Ok(texture)
-}
+use wgpu::{Sampler, SamplerDescriptor, Texture, TextureView, TextureViewDescriptor};
 
 pub struct CubeTexture {
     pub texture: Texture,
@@ -266,115 +221,5 @@ impl HdrLoader {
             texture_format,
             equirect_layout,
         }
-    }
-
-    pub fn load_equirectangular_bytes(
-        &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        data: &[u8],
-        dst_size: u32,
-    ) -> ImageResult<CubeTexture> {
-        let hdr_decoder = HdrDecoder::new(Cursor::new(data))?;
-        let HdrMetadata { width, height, .. } = hdr_decoder.metadata();
-        let mut pixels = vec![[0.0, 0.0, 0.0, 0.0]; width as usize * height as usize];
-        hdr_decoder.read_image_transform(
-            |pix| {
-                // There's no Rgb32Float format, so we need
-                // an extra float
-                let rgb = pix.to_hdr();
-                [rgb.0[0], rgb.0[1], rgb.0[2], 1.0f32]
-            },
-            &mut pixels[..],
-        )?;
-
-        // let img = image::open(image_path)?;
-        // let (width, height) = img.dimensions();
-
-        let size = wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        };
-        let src = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("HDR Texture"),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-
-        queue.write_texture(
-            wgpu::ImageCopyTexture {
-                texture: &src,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            bytemuck::cast_slice(&pixels),
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: Some(width * std::mem::size_of::<[f32; 4]>() as u32),
-                rows_per_image: Some(height),
-            },
-            // wgpu::ImageDataLayout {
-            //     offset: 0,
-            //     bytes_per_row: Some(4 * width),
-            //     rows_per_image: Some(height),
-            // },
-            size,
-        );
-
-        let src_view = src.create_view(&TextureViewDescriptor {
-            label: Some("HDR Texture view"),
-            dimension: Some(wgpu::TextureViewDimension::D2),
-            ..Default::default()
-        });
-
-        let dst = CubeTexture::create_2d(
-            device,
-            dst_size,
-            dst_size,
-            self.texture_format,
-            1,
-            wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
-        );
-
-        let dst_view = dst.texture.create_view(&wgpu::TextureViewDescriptor {
-            dimension: Some(wgpu::TextureViewDimension::D2Array),
-            ..Default::default()
-        });
-
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("equirect_to_cubemap bind group"),
-            layout: &self.equirect_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&src_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&dst_view),
-                },
-            ],
-        });
-
-        let mut encoder = device.create_command_encoder(&Default::default());
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
-
-        let num_workgroups = (dst_size + 15) / 16;
-        pass.set_pipeline(&self.equirect_to_cubemap);
-        pass.set_bind_group(0, &bind_group, &[]);
-        pass.dispatch_workgroups(num_workgroups, num_workgroups, 6);
-
-        drop(pass);
-
-        queue.submit([encoder.finish()]);
-
-        Ok(dst)
     }
 }

@@ -1,7 +1,6 @@
 use std::{num::NonZeroU32, path::Path, time::Instant};
 
 use crate::{scene::SphereDataBuffer, texture::CubeTexture, utils};
-use egui_winit_platform::Platform;
 use wgpu::{
     Buffer, BufferDescriptor, CommandEncoder, Device, Extent3d, Queue, SamplerBindingType,
     SurfaceConfiguration, SurfaceTexture, Texture, TextureViewDescriptor,
@@ -363,54 +362,99 @@ impl Renderer {
         }
     }
 
-    pub fn render_ui(&mut self, platform: &mut Platform, is_moving: bool) {
-        egui::Window::new("Renderer settings")
-            .resizable(true)
-            .show(&platform.context(), |ui| {
-                ui.collapsing("General", |ui| {
-                    ui.add(
-                        egui::Slider::new(&mut self.settings.samples_per_pixel, 1..=256)
-                            .text("samples per pixel"),
-                    );
-                    ui.add(egui::Slider::new(&mut self.settings.depth, 1..=256).text("depth"));
-                    ui.add(egui::Slider::new(&mut self.settings.t_min, 0.0..=1.0).text("t_min"));
-                    ui.add(egui::Slider::new(&mut self.settings.t_max, 1.0..=9000.0).text("t_max"));
-                });
-
-                ui.collapsing("Progressive rendering", |ui| {
-                    let enabled_checkbox = ui.add(egui::Checkbox::new(
-                        &mut self.progressive_rendering.enabled,
-                        "enabled",
-                    ));
-                    if enabled_checkbox.changed() {
-                        self.progressive_rendering.reset_ready_samples();
-                    }
-
-                    ui.add_enabled(
-                        self.progressive_rendering.enabled,
-                        egui::Slider::new(
-                            &mut self.progressive_rendering.sample_size,
-                            1..=MAX_NUMBER_OF_SAMPLES,
-                        )
-                        .text("samples"),
-                    );
-
-                    ui.add(egui::Label::new(format!(
-                        "Samples used: {}/{}",
-                        self.progressive_rendering.get_sample_size(is_moving),
-                        MAX_NUMBER_OF_SAMPLES
-                    )));
-
-                    ui.add_enabled(
-                        self.progressive_rendering.enabled,
-                        egui::Slider::new(
-                            &mut self.progressive_rendering.sample_size_while_moving,
-                            1..=MAX_NUMBER_OF_SAMPLES,
-                        )
-                        .text("samples while moving"),
-                    );
-                });
+    pub fn render_ui(&mut self, ui: &mut egui::Ui, is_moving: bool) {
+        ui.collapsing("Rendering", |ui| {
+            ui.collapsing("General", |ui| {
+                ui.add(
+                    egui::Slider::new(&mut self.settings.samples_per_pixel, 1..=256)
+                        .text("samples per pixel"),
+                );
+                ui.add(egui::Slider::new(&mut self.settings.depth, 1..=256).text("depth"));
+                ui.add(egui::Slider::new(&mut self.settings.t_min, 0.0..=1.0).text("t_min"));
+                ui.add(egui::Slider::new(&mut self.settings.t_max, 1.0..=9000.0).text("t_max"));
             });
+
+            ui.collapsing("Progressive rendering", |ui| {
+                let enabled_checkbox = ui.add(egui::Checkbox::new(
+                    &mut self.progressive_rendering.enabled,
+                    "enabled",
+                ));
+                if enabled_checkbox.changed() {
+                    self.progressive_rendering.reset_ready_samples();
+                }
+
+                ui.add_enabled(
+                    self.progressive_rendering.enabled,
+                    egui::Slider::new(
+                        &mut self.progressive_rendering.sample_size,
+                        1..=MAX_NUMBER_OF_SAMPLES,
+                    )
+                    .text("samples"),
+                );
+
+                ui.add(egui::Label::new(format!(
+                    "Samples used: {}/{}",
+                    self.progressive_rendering.get_sample_size(is_moving),
+                    MAX_NUMBER_OF_SAMPLES
+                )));
+
+                ui.add_enabled(
+                    self.progressive_rendering.enabled,
+                    egui::Slider::new(
+                        &mut self.progressive_rendering.sample_size_while_moving,
+                        1..=MAX_NUMBER_OF_SAMPLES,
+                    )
+                    .text("samples while moving"),
+                );
+            });
+        });
+        // egui::Window::new("Renderer settings")
+        //     .resizable(true)
+        //     .show(&platform.context(), |ui| {
+        //         ui.collapsing("General", |ui| {
+        //             ui.add(
+        //                 egui::Slider::new(&mut self.settings.samples_per_pixel, 1..=256)
+        //                     .text("samples per pixel"),
+        //             );
+        //             ui.add(egui::Slider::new(&mut self.settings.depth, 1..=256).text("depth"));
+        //             ui.add(egui::Slider::new(&mut self.settings.t_min, 0.0..=1.0).text("t_min"));
+        //             ui.add(egui::Slider::new(&mut self.settings.t_max, 1.0..=9000.0).text("t_max"));
+        //         });
+        //
+        //         ui.collapsing("Progressive rendering", |ui| {
+        //             let enabled_checkbox = ui.add(egui::Checkbox::new(
+        //                 &mut self.progressive_rendering.enabled,
+        //                 "enabled",
+        //             ));
+        //             if enabled_checkbox.changed() {
+        //                 self.progressive_rendering.reset_ready_samples();
+        //             }
+        //
+        //             ui.add_enabled(
+        //                 self.progressive_rendering.enabled,
+        //                 egui::Slider::new(
+        //                     &mut self.progressive_rendering.sample_size,
+        //                     1..=MAX_NUMBER_OF_SAMPLES,
+        //                 )
+        //                 .text("samples"),
+        //             );
+        //
+        //             ui.add(egui::Label::new(format!(
+        //                 "Samples used: {}/{}",
+        //                 self.progressive_rendering.get_sample_size(is_moving),
+        //                 MAX_NUMBER_OF_SAMPLES
+        //             )));
+        //
+        //             ui.add_enabled(
+        //                 self.progressive_rendering.enabled,
+        //                 egui::Slider::new(
+        //                     &mut self.progressive_rendering.sample_size_while_moving,
+        //                     1..=MAX_NUMBER_OF_SAMPLES,
+        //                 )
+        //                 .text("samples while moving"),
+        //             );
+        //         });
+        //     });
     }
 
     fn update(&mut self, scene: &Scene) {

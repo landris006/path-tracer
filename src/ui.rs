@@ -1,10 +1,12 @@
+use std::cell::RefCell;
+
 use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
 use egui_winit_platform::{Platform, PlatformDescriptor};
 use wgpu::{CommandEncoder, Device, Queue, SurfaceTexture, TextureFormat};
 use winit::{event::Event, window::Window};
 
 pub struct Ui {
-    platform: Platform,
+    pub platform: RefCell<Platform>,
     render_pass: RenderPass,
 }
 
@@ -20,7 +22,7 @@ impl Ui {
         let render_pass = RenderPass::new(device, surface_format, 1);
 
         Self {
-            platform,
+            platform: RefCell::new(platform),
             render_pass,
         }
     }
@@ -37,8 +39,7 @@ impl Ui {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let platform = &mut self.platform;
-
+        let mut platform = self.platform.borrow_mut();
         let full_output = platform.end_frame(Some(window));
         let paint_jobs = platform.context().tessellate(full_output.shapes);
 
@@ -62,19 +63,16 @@ impl Ui {
     }
 
     pub fn begin_new_frame(&mut self, time: f64) {
-        self.platform.update_time(time);
-        self.platform.begin_frame();
-    }
-
-    pub fn platform_mut(&mut self) -> &mut Platform {
-        &mut self.platform
+        let mut platform = self.platform.borrow_mut();
+        platform.update_time(time);
+        platform.begin_frame();
     }
 
     pub fn handle_event(&mut self, event: &Event<()>) {
-        self.platform.handle_event(event);
+        self.platform.borrow_mut().handle_event(event);
     }
 
     pub fn contains_mouse(&self) -> bool {
-        self.platform.context().is_pointer_over_area()
+        self.platform.borrow().context().is_pointer_over_area()
     }
 }

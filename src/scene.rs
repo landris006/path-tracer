@@ -3,7 +3,6 @@ use std::{cmp, usize};
 use crate::{camera::Ray, MAX_NUMBER_OF_SPHERES};
 use bytemuck::Zeroable;
 use cgmath::{InnerSpace, Vector3};
-use egui_winit_platform::Platform;
 use uuid::Uuid;
 
 use crate::camera::Camera;
@@ -23,37 +22,70 @@ impl Scene {
         }
     }
 
-    pub fn render_ui(&mut self, platform: &mut Platform) {
-        egui::Window::new("Scene")
-            .resizable(true)
-            .show(&platform.context(), |ui| {
-                ui.horizontal(|ui| {
-                    if ui
-                        .button("Add Sphere")
-                        .on_hover_text("Add a sphere to the scene")
-                        .clicked()
-                    {
-                        self.spheres.push(Sphere::new(SphereDescriptor {
-                            center: Vector3::new(0.0, 0.0, 0.0),
-                            radius: 1.0,
-                            albedo: Vector3::new(0.5, 0.5, 0.5),
-                            material: Material::Diffuse,
-                        }));
-                    }
+    pub fn render_ui(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
+        ui.collapsing("Scene", |ui| {
+            ui.horizontal(|ui| {
+                if ui
+                    .button("Add Sphere")
+                    .on_hover_text("Add a sphere to the scene")
+                    .clicked()
+                {
+                    self.spheres.push(Sphere::new(SphereDescriptor {
+                        center: Vector3::new(0.0, 0.0, 0.0),
+                        radius: 1.0,
+                        albedo: Vector3::new(0.5, 0.5, 0.5),
+                        material: Material::Diffuse,
+                    }));
+                }
 
-                    if ui
-                        .button("Remove Sphere")
-                        .on_hover_text("Remove the last sphere from the scene")
-                        .clicked()
-                    {
-                        self.spheres.pop();
-                    }
+                if ui
+                    .button("Remove Sphere")
+                    .on_hover_text("Remove the last sphere from the scene")
+                    .clicked()
+                {
+                    self.spheres.pop();
+                }
+            });
+            ui.separator();
+
+            for (i, sphere) in self.spheres.iter_mut().enumerate() {
+                ui.collapsing(format!("Sphere {}", i), |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Center");
+                        ui.add(egui::DragValue::new(&mut sphere.center.x).speed(0.1));
+                        ui.add(egui::DragValue::new(&mut sphere.center.y).speed(0.1));
+                        ui.add(egui::DragValue::new(&mut sphere.center.z).speed(0.1));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Radius");
+                        ui.add(egui::DragValue::new(&mut sphere.radius).speed(0.1));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Albedo");
+                        ui.add(egui::DragValue::new(&mut sphere.albedo.x));
+                        ui.add(egui::DragValue::new(&mut sphere.albedo.y));
+                        ui.add(egui::DragValue::new(&mut sphere.albedo.z));
+
+                        let mut color: [f32; 3] = sphere.albedo.into();
+                        ui.color_edit_button_rgb(&mut color);
+                        sphere.albedo = color.into();
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Material");
+                        ui.radio_value(&mut sphere.material, Material::Diffuse, "Diffuse");
+                        ui.radio_value(&mut sphere.material, Material::Metal, "Metal");
+                        ui.radio_value(&mut sphere.material, Material::Dielectric, "Dielectric");
+                    });
                 });
+            }
+        });
 
-                ui.separator();
-
-                for (i, sphere) in self.spheres.iter_mut().enumerate() {
-                    ui.collapsing(format!("Sphere {}", i), |ui| {
+        if let Some(selected_sphere) = self.selected_sphere {
+            if let Some(sphere) = self.spheres.iter_mut().find(|s| s.uuid == selected_sphere) {
+                egui::Window::new("Selected Sphere")
+                    .default_pos(egui::Pos2::new(400.0, 400.0))
+                    .resizable(true)
+                    .show(context, |ui| {
                         ui.horizontal(|ui| {
                             ui.label("Center");
                             ui.add(egui::DragValue::new(&mut sphere.center.x).speed(0.1));
@@ -85,46 +117,6 @@ impl Scene {
                             );
                         });
                     });
-                }
-            });
-
-        if let Some(selected_sphere) = self.selected_sphere {
-            if let Some(sphere) = self.spheres.iter_mut().find(|s| s.uuid == selected_sphere) {
-                egui::Window::new("Selected Sphere").resizable(true).show(
-                    &platform.context(),
-                    |ui| {
-                        ui.horizontal(|ui| {
-                            ui.label("Center");
-                            ui.add(egui::DragValue::new(&mut sphere.center.x).speed(0.1));
-                            ui.add(egui::DragValue::new(&mut sphere.center.y).speed(0.1));
-                            ui.add(egui::DragValue::new(&mut sphere.center.z).speed(0.1));
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("Radius");
-                            ui.add(egui::DragValue::new(&mut sphere.radius).speed(0.1));
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("Albedo");
-                            ui.add(egui::DragValue::new(&mut sphere.albedo.x));
-                            ui.add(egui::DragValue::new(&mut sphere.albedo.y));
-                            ui.add(egui::DragValue::new(&mut sphere.albedo.z));
-
-                            let mut color: [f32; 3] = sphere.albedo.into();
-                            ui.color_edit_button_rgb(&mut color);
-                            sphere.albedo = color.into();
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("Material");
-                            ui.radio_value(&mut sphere.material, Material::Diffuse, "Diffuse");
-                            ui.radio_value(&mut sphere.material, Material::Metal, "Metal");
-                            ui.radio_value(
-                                &mut sphere.material,
-                                Material::Dielectric,
-                                "Dielectric",
-                            );
-                        });
-                    },
-                );
             }
         }
     }
