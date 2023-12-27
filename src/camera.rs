@@ -38,7 +38,7 @@ impl Camera {
             right: Vector3::new(1.0, 0.0, 0.0),
             up: Vector3::new(0.0, 1.0, 0.0),
             focal_length: 1.0,
-            vfov: 45.0,
+            vfov: 75.0,
             last_move_time: Instant::now(),
         }
     }
@@ -126,7 +126,7 @@ impl CameraController {
             prev_cursor_pos: None,
             yaw: 0.0,
             pitch: 0.0,
-            speed: 0.8,
+            speed: 3.0,
         }
     }
 

@@ -345,8 +345,9 @@ impl Renderer {
             },
             settings_buffer,
             progressive_rendering: ProgressiveRendering {
-                sample_size: 4,
-                sample_size_while_moving: 4,
+                enabled: true,
+                sample_size: 128,
+                sample_size_while_moving: 1,
                 ready_samples: 0,
                 buffer: progressive_rendering_samples_buffer,
                 output_textures,
@@ -377,7 +378,16 @@ impl Renderer {
                 });
 
                 ui.collapsing("Progressive rendering", |ui| {
-                    ui.add(
+                    let enabled_checkbox = ui.add(egui::Checkbox::new(
+                        &mut self.progressive_rendering.enabled,
+                        "enabled",
+                    ));
+                    if enabled_checkbox.changed() {
+                        self.progressive_rendering.reset_ready_samples();
+                    }
+
+                    ui.add_enabled(
+                        self.progressive_rendering.enabled,
                         egui::Slider::new(
                             &mut self.progressive_rendering.sample_size,
                             1..=MAX_NUMBER_OF_SAMPLES,
@@ -391,7 +401,8 @@ impl Renderer {
                         MAX_NUMBER_OF_SAMPLES
                     )));
 
-                    ui.add(
+                    ui.add_enabled(
+                        self.progressive_rendering.enabled,
                         egui::Slider::new(
                             &mut self.progressive_rendering.sample_size_while_moving,
                             1..=MAX_NUMBER_OF_SAMPLES,
@@ -404,7 +415,7 @@ impl Renderer {
 
     fn update(&mut self, scene: &Scene) {
         if scene.camera.moved_recently() {
-            self.progressive_rendering.ready_samples = 0;
+            self.progressive_rendering.reset_ready_samples();
         }
     }
 
@@ -531,6 +542,7 @@ struct Settings {
 }
 
 struct ProgressiveRendering {
+    enabled: bool,
     sample_size: u32,
     sample_size_while_moving: u32,
     buffer: Buffer,
@@ -540,6 +552,10 @@ struct ProgressiveRendering {
 
 impl ProgressiveRendering {
     fn get_sample_size(&self, is_moving: bool) -> u32 {
+        if !self.enabled {
+            return self.ready_samples;
+        }
+
         if is_moving {
             self.sample_size_while_moving
         } else {
@@ -547,7 +563,15 @@ impl ProgressiveRendering {
         }
     }
 
+    fn reset_ready_samples(&mut self) {
+        self.ready_samples = 1;
+    }
+
     fn increment_ready_samples(&mut self) {
+        if !self.enabled {
+            return;
+        }
+
         self.ready_samples = u32::min(self.ready_samples + 1, self.sample_size);
     }
 }
