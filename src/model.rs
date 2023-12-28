@@ -133,10 +133,12 @@ impl Model {
                         usage: wgpu::BufferUsages::STORAGE,
                     });
 
+                dbg!(triangles.len());
+
                 Mesh {
                     name: file_path.to_string(),
                     triangle_buffer,
-                    triangle_count: model.mesh.indices.len() as u32 / 3,
+                    triangle_count: triangles.len() as u32,
                     material: model.mesh.material_id.unwrap_or(0),
                 }
             })

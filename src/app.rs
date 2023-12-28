@@ -2,6 +2,7 @@ use std::time::Instant;
 
 use cgmath::Vector3;
 
+use crate::MAX_NUMBER_OF_SPHERES;
 use winit::{
     dpi::PhysicalPosition,
     event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent},
@@ -10,8 +11,8 @@ use winit::{
 };
 
 use crate::{
-    camera::{Camera, CameraController, Ray},
     renderer::Renderer,
+    scene::{Camera, CameraController, Ray},
     scene::{HitRecord, Material, Scene, Sphere, SphereDescriptor},
     ui::Ui,
 };

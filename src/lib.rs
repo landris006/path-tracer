@@ -4,7 +4,6 @@ use crate::app::App;
 use winit::{dpi::LogicalSize, event_loop::EventLoopBuilder, window::WindowBuilder};
 
 mod app;
-mod camera;
 mod model;
 mod renderer;
 mod scene;

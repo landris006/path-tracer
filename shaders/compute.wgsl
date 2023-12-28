@@ -225,7 +225,7 @@ fn hitScene(ray: Ray) -> HitRecord {
         }
     }
 
-    for (var i = 0u; i < triangleCount / 100u; i = i + 1u) {
+    for (var i = 0u; i < 0u; i = i + 1u) {
         let triangle = triangles[i];
         let objectHitRecord = hitTriangle(ray, triangle);
 
@@ -335,7 +335,7 @@ fn hitTriangle(ray: Ray, triangle: Triangle) -> HitRecord {
     hitRecord.t = t;
     hitRecord.p = ray.origin + t * ray.direction;
 
-    let outwardNormal: vec3<f32> = normalize(cross(edge1, edge2));
+    let outwardNormal: vec3<f32> = (triangle.an + triangle.bn + triangle.cn) / 3.0;
     hitRecord.frontFace = dot(ray.direction, outwardNormal) < 0.0;
     hitRecord.normal = select(-outwardNormal, outwardNormal, hitRecord.frontFace);
 

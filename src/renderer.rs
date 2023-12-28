@@ -7,7 +7,7 @@ use wgpu::{
     SurfaceConfiguration, SurfaceTexture, Texture, TextureViewDescriptor,
 };
 
-use crate::{camera::CameraBuffer, scene::Scene, texture, WINDOW_HEIGHT, WINDOW_WIDTH};
+use crate::{scene::CameraBuffer, scene::Scene, texture, WINDOW_HEIGHT, WINDOW_WIDTH};
 
 const MAX_NUMBER_OF_SAMPLES: u32 = 256;
 
