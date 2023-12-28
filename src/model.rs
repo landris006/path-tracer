@@ -28,8 +28,7 @@ pub struct Material {
 
 pub struct Mesh {
     pub name: String,
-    pub triangle_buffer: wgpu::Buffer,
-    pub triangle_count: u32,
+    pub triangles: Vec<Triangle>,
     pub material: usize,
 }
 
@@ -126,19 +125,9 @@ impl Model {
                     })
                     .collect::<Vec<_>>();
 
-                let triangle_buffer =
-                    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some(&format!("{:?} Triangle Buffer", file_path)),
-                        contents: bytemuck::cast_slice(&triangles),
-                        usage: wgpu::BufferUsages::STORAGE,
-                    });
-
-                dbg!(triangles.len());
-
                 Mesh {
                     name: file_path.to_string(),
-                    triangle_buffer,
-                    triangle_count: triangles.len() as u32,
+                    triangles,
                     material: model.mesh.material_id.unwrap_or(0),
                 }
             })
@@ -181,6 +170,12 @@ impl Default for Triangle {
             nc: [0.0; 3],
             _pad5: 0.0,
         }
+    }
+}
+
+impl Triangle {
+    pub fn vertices(&self) -> [[f32; 3]; 3] {
+        [self.a, self.b, self.c]
     }
 }
 

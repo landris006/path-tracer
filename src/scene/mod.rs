@@ -1,10 +1,16 @@
 use cgmath::Vector3;
 use uuid::Uuid;
 
+mod bvh;
 mod camera;
 mod sphere;
+
 pub use camera::*;
 pub use sphere::*;
+
+use crate::model::Triangle;
+
+use self::bvh::Bvh;
 
 #[derive(Debug, PartialEq)]
 pub enum Material {
@@ -18,14 +24,18 @@ pub struct Scene {
     pub camera: Camera,
     pub spheres: Vec<Sphere>,
     pub selected_sphere: Option<Uuid>,
+    pub triangles: Vec<Triangle>,
+    pub bvh: Bvh,
 }
 
 impl Scene {
-    pub fn new(spheres: Vec<Sphere>, camera: Camera) -> Self {
+    pub fn new(spheres: Vec<Sphere>, triangles: Vec<Triangle>, camera: Camera) -> Self {
         Self {
             camera,
             spheres,
             selected_sphere: None,
+            bvh: Bvh::from_triangles(&triangles),
+            triangles,
         }
     }
 

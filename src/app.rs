@@ -1,8 +1,7 @@
 use std::time::Instant;
 
+use crate::model::Model;
 use cgmath::Vector3;
-
-use crate::MAX_NUMBER_OF_SPHERES;
 use winit::{
     dpi::PhysicalPosition,
     event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent},
@@ -105,8 +104,6 @@ impl App {
         };
         surface.configure(&device, &config);
 
-        let renderer = Renderer::new(&device, &queue, &config);
-
         let camera = Camera::new();
 
         let spheres = vec![
@@ -149,7 +146,13 @@ impl App {
         ];
 
         let ui = Ui::new(&window, &device, surface_format);
-        let scene = Scene::new(spheres, camera);
+
+        let model = Model::from_obj("assets/models/bunny.obj", &device, &queue).unwrap();
+        let triangles = model.meshes.into_iter().next().unwrap().triangles;
+
+        let scene = Scene::new(spheres, triangles, camera);
+
+        let renderer = Renderer::new(&device, &queue, &config, &scene);
 
         Self {
             surface,

@@ -33,7 +33,7 @@ impl Ray {
 impl Camera {
     pub fn new() -> Self {
         Self {
-            origin: Vector3::new(0.0, 0.0, 0.0),
+            origin: Vector3::new(0.0, 0.0, -3.0),
             forward: Vector3::new(0.0, 0.0, -1.0),
             right: Vector3::new(1.0, 0.0, 0.0),
             up: Vector3::new(0.0, 1.0, 0.0),

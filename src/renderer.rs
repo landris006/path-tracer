@@ -30,7 +30,12 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(device: &Device, queue: &Queue, surface_config: &SurfaceConfiguration) -> Self {
+    pub fn new(
+        device: &Device,
+        queue: &Queue,
+        surface_config: &SurfaceConfiguration,
+        scene: &Scene,
+    ) -> Self {
         let src = utils::load_shader_source(Path::new("shaders"), "compute.wgsl").unwrap();
         let compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("compute"),
@@ -85,12 +90,23 @@ impl Renderer {
                         },
                         count: None,
                     },
-                    // Triangle count
+                    // Triangle indices
                     wgpu::BindGroupLayoutEntry {
                         binding: 4,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // BVH nodes
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 5,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
                             min_binding_size: None,
                         },
@@ -98,7 +114,7 @@ impl Renderer {
                     },
                     // Time
                     wgpu::BindGroupLayoutEntry {
-                        binding: 5,
+                        binding: 6,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
@@ -109,7 +125,7 @@ impl Renderer {
                     },
                     // Sky texture
                     wgpu::BindGroupLayoutEntry {
-                        binding: 6,
+                        binding: 7,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Texture {
                             multisampled: false,
@@ -120,14 +136,14 @@ impl Renderer {
                     },
                     // Sky Texture Sampler
                     wgpu::BindGroupLayoutEntry {
-                        binding: 7,
+                        binding: 8,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Sampler(SamplerBindingType::NonFiltering),
                         count: None,
                     },
                     // Settings
                     wgpu::BindGroupLayoutEntry {
-                        binding: 8,
+                        binding: 9,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
@@ -202,13 +218,21 @@ impl Renderer {
         let sky_texture =
             CubeTexture::from_equirectangular_hdri(&hdr_loader, device, queue, data, 4096).unwrap();
 
-        let model = Model::from_obj("assets/models/bunny.obj", device, queue).unwrap();
-        let triangle_buffer = &model.meshes.first().unwrap().triangle_buffer;
-        let triangle_count = model.meshes.first().unwrap().triangle_count;
-        let triangle_count_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&[triangle_count]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        let triangle_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Triangle Buffer"),
+            contents: bytemuck::cast_slice(&scene.triangles),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+        let triangle_indices_buffer =
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Triangle Indices Buffer"),
+                contents: bytemuck::cast_slice(&scene.bvh.triangle_indices),
+                usage: wgpu::BufferUsages::STORAGE,
+            });
+        let bvh_nodes_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("BVH Nodes Buffer"),
+            contents: bytemuck::cast_slice(&scene.bvh.nodes),
+            usage: wgpu::BufferUsages::STORAGE,
         });
 
         let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -233,22 +257,26 @@ impl Renderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 4,
-                    resource: triangle_count_buffer.as_entire_binding(),
+                    resource: triangle_indices_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 5,
-                    resource: time_buffer.as_entire_binding(),
+                    resource: bvh_nodes_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 6,
-                    resource: wgpu::BindingResource::TextureView(&sky_texture.view),
+                    resource: time_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 7,
-                    resource: wgpu::BindingResource::Sampler(&sky_texture.sampler),
+                    resource: wgpu::BindingResource::TextureView(&sky_texture.view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 8,
+                    resource: wgpu::BindingResource::Sampler(&sky_texture.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 9,
                     resource: settings_buffer.as_entire_binding(),
                 },
             ],

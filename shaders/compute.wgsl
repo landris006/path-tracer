@@ -55,6 +55,13 @@ struct Triangle {
   _pad5: f32,
 }
 
+struct Node {
+  minCorner: vec3<f32>,
+  leftChildIndex: u32,
+  maxCorner: vec3<f32>,
+  triangleCount: u32,
+}
+
 struct SphereData {
   sphereCount: u32,
   spheres: array<Sphere>,
@@ -64,11 +71,12 @@ struct SphereData {
 @group(0) @binding(1) var<uniform> camera: Camera;
 @group(0) @binding(2) var<storage, read> sphereData: SphereData;
 @group(0) @binding(3) var<storage, read> triangles: array<Triangle>;
-@group(0) @binding(4) var<uniform> triangleCount: u32;
-@group(0) @binding(5) var<uniform> time: u32;
-@group(0) @binding(6) var skyTexture: texture_cube<f32>;
-@group(0) @binding(7) var skyTextureSampler: sampler;
-@group(0) @binding(8) var<uniform> settings: Settings;
+@group(0) @binding(4) var<storage, read> triangleIndices: array<u32>;
+@group(0) @binding(5) var<storage, read> bvhNodes: array<Node>;
+@group(0) @binding(6) var<uniform> time: u32;
+@group(0) @binding(7) var skyTexture: texture_cube<f32>;
+@group(0) @binding(8) var skyTextureSampler: sampler;
+@group(0) @binding(9) var<uniform> settings: Settings;
 
 @compute @workgroup_size(16, 16)
 fn main(@builtin(global_invocation_id) threadId: vec3<u32>) {
@@ -217,7 +225,7 @@ fn hitScene(ray: Ray) -> HitRecord {
         let objectHitRecord = hitSphere(ray, sphere);
 
         if !objectHitRecord.hit {
-            continue;
+             continue;
         }
 
         if !hitRecord.hit || objectHitRecord.t < hitRecord.t {
@@ -225,16 +233,79 @@ fn hitScene(ray: Ray) -> HitRecord {
         }
     }
 
-    for (var i = 0u; i < 0u; i = i + 1u) {
-        let triangle = triangles[i];
-        let objectHitRecord = hitTriangle(ray, triangle);
 
-        if !objectHitRecord.hit {
-            continue;
-        }
+    // for (var i = 0u; i < 1000u; i++) {
+    //     let triangle = triangles[(triangleIndices[i])];
+    //     let objectHitRecord = hitTriangle(ray, triangle);
 
-        if !hitRecord.hit || objectHitRecord.t < hitRecord.t {
-            hitRecord = objectHitRecord;
+    //     if !objectHitRecord.hit {
+    //                 continue;
+    //     }
+
+    //     if !hitRecord.hit || objectHitRecord.t < hitRecord.t {
+    //         hitRecord = objectHitRecord;
+    //     }
+    // }
+
+    var node: Node = bvhNodes[0u];
+    var stack: array<Node, 15>;
+    var stackLocation: u32 = 0u;
+    var nearestHit: f32 = 9999.0;
+
+    while true {
+        var contents: u32 = u32(node.leftChildIndex);
+
+        if node.triangleCount == 0u {
+            var child1: Node = bvhNodes[contents];
+            var child2: Node = bvhNodes[contents + 1u];
+
+            var distance1: f32 = hit_aabb(ray, child1);
+            var distance2: f32 = hit_aabb(ray, child2);
+            if distance1 > distance2 {
+                var tempDist: f32 = distance1;
+                distance1 = distance2;
+                distance2 = tempDist;
+
+                var tempChild: Node = child1;
+                child1 = child2;
+                child2 = tempChild;
+            }
+
+            if distance1 > nearestHit {
+                if stackLocation == 0u {
+                    break;
+                } else {
+                    stackLocation -= 1u;
+                    node = stack[stackLocation];
+                }
+            } else {
+                node = child1;
+                if distance2 < nearestHit {
+                    stack[stackLocation] = child2;
+                    stackLocation += 1u;
+                }
+            }
+        } else {
+            for (var i = 0u; i < node.triangleCount; i++) {
+                let triangle = triangles[(triangleIndices[i + contents])];
+                let objectHitRecord = hitTriangle(ray, triangle);
+
+                if !objectHitRecord.hit {
+                    continue;
+                }
+
+                if !hitRecord.hit || objectHitRecord.t < hitRecord.t {
+                    hitRecord = objectHitRecord;
+                    nearestHit = hitRecord.t;
+                }
+            }
+
+            if stackLocation == 0u {
+                break;
+            } else {
+                stackLocation -= 1u;
+                node = stack[stackLocation];
+            }
         }
     }
 
@@ -373,4 +444,21 @@ fn refract(dir: vec3<f32 >, normal: vec3<f32>, etaiOverEtat: f32) -> vec3<f32> {
     let rOutParallel: vec3<f32> = -sqrt(abs(1.0 - dot(rOutPerp, rOutPerp))) * normal;
 
     return rOutParallel + rOutPerp;
+}
+
+fn hit_aabb(ray: Ray, node: Node) -> f32 {
+    var inverseDir: vec3<f32> = vec3<f32>(1.0) / ray.direction;
+    var t1: vec3<f32> = (node.minCorner - ray.origin) * inverseDir;
+    var t2: vec3<f32> = (node.maxCorner - ray.origin) * inverseDir;
+    var tMin: vec3<f32> = min(t1, t2);
+    var tMax: vec3<f32> = max(t1, t2);
+
+    var t_min: f32 = max(max(tMin.x, tMin.y), tMin.z);
+    var t_max: f32 = min(min(tMax.x, tMax.y), tMax.z);
+
+    if t_min > t_max || t_max < 0.0 {
+        return 99999.0;
+    } else {
+        return t_min;
+    }
 }
