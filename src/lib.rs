@@ -5,6 +5,7 @@ use winit::{dpi::LogicalSize, event_loop::EventLoopBuilder, window::WindowBuilde
 
 mod app;
 mod camera;
+mod model;
 mod renderer;
 mod scene;
 mod texture;

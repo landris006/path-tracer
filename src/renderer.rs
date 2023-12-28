@@ -1,7 +1,8 @@
 use std::{num::NonZeroU32, path::Path, time::Instant};
 
-use crate::{scene::SphereDataBuffer, texture::CubeTexture, utils};
+use crate::{model::Model, scene::SphereDataBuffer, texture::CubeTexture, utils};
 use wgpu::{
+    util::{BufferInitDescriptor, DeviceExt},
     Buffer, BufferDescriptor, CommandEncoder, Device, Extent3d, Queue, SamplerBindingType,
     SurfaceConfiguration, SurfaceTexture, Texture, TextureViewDescriptor,
 };
@@ -73,9 +74,31 @@ impl Renderer {
                         },
                         count: None,
                     },
-                    // Time
+                    // Triangles
                     wgpu::BindGroupLayoutEntry {
                         binding: 3,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Triangle count
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Time
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 5,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
@@ -86,7 +109,7 @@ impl Renderer {
                     },
                     // Sky texture
                     wgpu::BindGroupLayoutEntry {
-                        binding: 4,
+                        binding: 6,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Texture {
                             multisampled: false,
@@ -97,14 +120,14 @@ impl Renderer {
                     },
                     // Sky Texture Sampler
                     wgpu::BindGroupLayoutEntry {
-                        binding: 5,
+                        binding: 7,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Sampler(SamplerBindingType::NonFiltering),
                         count: None,
                     },
                     // Settings
                     wgpu::BindGroupLayoutEntry {
-                        binding: 6,
+                        binding: 8,
                         visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
@@ -175,10 +198,18 @@ impl Renderer {
 
         // TODO: maybe load on separate thread
         let hdr_loader = texture::HdrLoader::new(device);
-        let data = std::fs::read("assets/hdri/partly_cloudy_sky.hdr").unwrap();
+        let data = include_bytes!("../assets/hdri/partly_cloudy_sky.hdr");
         let sky_texture =
-            CubeTexture::from_equirectangular_hdri(&hdr_loader, device, queue, &data, 4096)
-                .unwrap();
+            CubeTexture::from_equirectangular_hdri(&hdr_loader, device, queue, data, 4096).unwrap();
+
+        let model = Model::from_obj("assets/models/bunny.obj", device, queue).unwrap();
+        let triangle_buffer = &model.meshes.first().unwrap().triangle_buffer;
+        let triangle_count = model.meshes.first().unwrap().triangle_count;
+        let triangle_count_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&[triangle_count]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
 
         let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
@@ -198,18 +229,26 @@ impl Renderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
-                    resource: time_buffer.as_entire_binding(),
+                    resource: triangle_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 4,
-                    resource: wgpu::BindingResource::TextureView(&sky_texture.view),
+                    resource: triangle_count_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 5,
-                    resource: wgpu::BindingResource::Sampler(&sky_texture.sampler),
+                    resource: time_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 6,
+                    resource: wgpu::BindingResource::TextureView(&sky_texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 7,
+                    resource: wgpu::BindingResource::Sampler(&sky_texture.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 8,
                     resource: settings_buffer.as_entire_binding(),
                 },
             ],
@@ -408,53 +447,6 @@ impl Renderer {
                 );
             });
         });
-        // egui::Window::new("Renderer settings")
-        //     .resizable(true)
-        //     .show(&platform.context(), |ui| {
-        //         ui.collapsing("General", |ui| {
-        //             ui.add(
-        //                 egui::Slider::new(&mut self.settings.samples_per_pixel, 1..=256)
-        //                     .text("samples per pixel"),
-        //             );
-        //             ui.add(egui::Slider::new(&mut self.settings.depth, 1..=256).text("depth"));
-        //             ui.add(egui::Slider::new(&mut self.settings.t_min, 0.0..=1.0).text("t_min"));
-        //             ui.add(egui::Slider::new(&mut self.settings.t_max, 1.0..=9000.0).text("t_max"));
-        //         });
-        //
-        //         ui.collapsing("Progressive rendering", |ui| {
-        //             let enabled_checkbox = ui.add(egui::Checkbox::new(
-        //                 &mut self.progressive_rendering.enabled,
-        //                 "enabled",
-        //             ));
-        //             if enabled_checkbox.changed() {
-        //                 self.progressive_rendering.reset_ready_samples();
-        //             }
-        //
-        //             ui.add_enabled(
-        //                 self.progressive_rendering.enabled,
-        //                 egui::Slider::new(
-        //                     &mut self.progressive_rendering.sample_size,
-        //                     1..=MAX_NUMBER_OF_SAMPLES,
-        //                 )
-        //                 .text("samples"),
-        //             );
-        //
-        //             ui.add(egui::Label::new(format!(
-        //                 "Samples used: {}/{}",
-        //                 self.progressive_rendering.get_sample_size(is_moving),
-        //                 MAX_NUMBER_OF_SAMPLES
-        //             )));
-        //
-        //             ui.add_enabled(
-        //                 self.progressive_rendering.enabled,
-        //                 egui::Slider::new(
-        //                     &mut self.progressive_rendering.sample_size_while_moving,
-        //                     1..=MAX_NUMBER_OF_SAMPLES,
-        //                 )
-        //                 .text("samples while moving"),
-        //             );
-        //         });
-        //     });
     }
 
     fn update(&mut self, scene: &Scene) {

@@ -3,9 +3,118 @@ use std::{io::Cursor, path::Path};
 use crate::utils;
 use image::{
     codecs::hdr::{HdrDecoder, HdrMetadata},
-    ImageResult,
+    GenericImageView, ImageResult,
 };
-use wgpu::{Sampler, SamplerDescriptor, Texture, TextureView, TextureViewDescriptor};
+use wgpu::{
+    Device, Sampler, SamplerDescriptor, Texture, TextureFormat, TextureUsages, TextureView,
+    TextureViewDescriptor,
+};
+
+pub struct Texture2D {
+    pub texture: Texture,
+    pub view: TextureView,
+    pub sampler: Sampler,
+}
+
+impl Texture2D {
+    pub fn new(
+        device: &Device,
+        width: u32,
+        height: u32,
+        format: TextureFormat,
+        usage: TextureUsages,
+    ) -> Self {
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Texture"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage,
+            view_formats: &[],
+        });
+
+        let sampler = device.create_sampler(&SamplerDescriptor {
+            label: Some("Texture Sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+        let view = texture.create_view(&TextureViewDescriptor::default());
+
+        Self {
+            texture,
+            view,
+            sampler,
+        }
+    }
+    pub fn from_file(path: &str, device: &wgpu::Device, queue: &wgpu::Queue) -> ImageResult<Self> {
+        let data = std::fs::read(path).unwrap();
+        Texture2D::from_bytes(device, queue, &data, false)
+    }
+
+    pub fn from_bytes(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        bytes: &[u8],
+        is_normal_map: bool,
+    ) -> ImageResult<Self> {
+        let img = image::load_from_memory(bytes)?;
+        Texture2D::from_image(device, queue, &img, is_normal_map)
+    }
+
+    pub fn from_image(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        img: &image::DynamicImage,
+        is_normal_map: bool,
+    ) -> ImageResult<Self> {
+        let (width, height) = img.dimensions();
+        let rgba = img.to_rgba8();
+
+        let format = if is_normal_map {
+            wgpu::TextureFormat::Rgba8Unorm
+        } else {
+            wgpu::TextureFormat::Rgba8UnormSrgb
+        };
+
+        let usage = wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST;
+        let size = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        let texture = Texture2D::new(device, width, height, format, usage);
+
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                aspect: wgpu::TextureAspect::All,
+                texture: &texture.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+            },
+            &rgba,
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * width),
+                rows_per_image: Some(height),
+            },
+            size,
+        );
+
+        Ok(texture)
+    }
+}
 
 pub struct CubeTexture {
     pub texture: Texture,

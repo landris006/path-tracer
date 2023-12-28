@@ -41,14 +41,18 @@ struct Sphere {
 }
 
 struct Triangle {
-  v0: vec3<f32>,
-  material: f32,
-  v1: vec3<f32>,
-  _padding1: f32,
-  v2: vec3<f32>,
-  _padding2: f32,
-  albedo: vec3<f32>,
-  _padding3: f32,
+  a: vec3<f32>,
+  _pad0: f32,
+  b: vec3<f32>,
+  _pad1: f32,
+  c: vec3<f32>,
+  _pad2: f32,
+  an: vec3<f32>,
+  _pad3: f32,
+  bn: vec3<f32>,
+  _pad4: f32,
+  cn: vec3<f32>,
+  _pad5: f32,
 }
 
 struct SphereData {
@@ -56,18 +60,15 @@ struct SphereData {
   spheres: array<Sphere>,
 }
 
-struct TriangleData {
-  triangleCount: u32,
-  triangles: array<Triangle>,
-}
-
 @group(0) @binding(0) var outputTex: texture_storage_2d<rgba8unorm, write>;
 @group(0) @binding(1) var<uniform> camera: Camera;
 @group(0) @binding(2) var<storage, read> sphereData: SphereData;
-@group(0) @binding(3) var<uniform> time: u32;
-@group(0) @binding(4) var skyTexture: texture_cube<f32>;
-@group(0) @binding(5) var skyTextureSampler: sampler;
-@group(0) @binding(6) var<uniform> settings: Settings;
+@group(0) @binding(3) var<storage, read> triangles: array<Triangle>;
+@group(0) @binding(4) var<uniform> triangleCount: u32;
+@group(0) @binding(5) var<uniform> time: u32;
+@group(0) @binding(6) var skyTexture: texture_cube<f32>;
+@group(0) @binding(7) var skyTextureSampler: sampler;
+@group(0) @binding(8) var<uniform> settings: Settings;
 
 @compute @workgroup_size(16, 16)
 fn main(@builtin(global_invocation_id) threadId: vec3<u32>) {
@@ -224,6 +225,19 @@ fn hitScene(ray: Ray) -> HitRecord {
         }
     }
 
+    for (var i = 0u; i < triangleCount / 100u; i = i + 1u) {
+        let triangle = triangles[i];
+        let objectHitRecord = hitTriangle(ray, triangle);
+
+        if !objectHitRecord.hit {
+            continue;
+        }
+
+        if !hitRecord.hit || objectHitRecord.t < hitRecord.t {
+            hitRecord = objectHitRecord;
+        }
+    }
+
     return hitRecord;
 }
 
@@ -271,6 +285,59 @@ fn hitSphere(ray: Ray, sphere: Sphere) -> HitRecord {
             hitRecord.hit = false;
         }
     }
+
+    return hitRecord;
+}
+
+fn hitTriangle(ray: Ray, triangle: Triangle) -> HitRecord {
+    let edge1: vec3<f32> = triangle.b - triangle.a;
+    let edge2: vec3<f32> = triangle.c - triangle.a;
+
+    let h: vec3<f32> = cross(ray.direction, edge2);
+    let a: f32 = dot(edge1, h);
+
+    var hitRecord: HitRecord = HitRecord(
+        false,
+        0.0,
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.0, 0.0, 0.0),
+        false,
+        vec3<f32>(0.3, 0.4, 0.25),
+        0.0,
+    );
+
+    if a > -0.00001 && a < 0.00001 {
+        return hitRecord; // This ray is parallel to this triangle.
+    }
+
+    let f: f32 = 1.0 / a;
+    let s: vec3<f32> = ray.origin - triangle.a;
+    let u: f32 = f * dot(s, h);
+
+    if u < 0.0 || u > 1.0 {
+        return hitRecord;
+    }
+
+    let q: vec3<f32> = cross(s, edge1);
+    let v: f32 = f * dot(ray.direction, q);
+
+    if v < 0.0 || u + v > 1.0 {
+        return hitRecord;
+    }
+
+    let t: f32 = f * dot(edge2, q);
+
+    if t <= settings.tMin || t >= settings.tMax {
+        return hitRecord;
+    }
+
+    hitRecord.hit = true;
+    hitRecord.t = t;
+    hitRecord.p = ray.origin + t * ray.direction;
+
+    let outwardNormal: vec3<f32> = normalize(cross(edge1, edge2));
+    hitRecord.frontFace = dot(ray.direction, outwardNormal) < 0.0;
+    hitRecord.normal = select(-outwardNormal, outwardNormal, hitRecord.frontFace);
 
     return hitRecord;
 }
