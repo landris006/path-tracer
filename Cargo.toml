@@ -1,5 +1,5 @@
 [package]
-name = "raytracer"
+name = "pathtracer"
 version = "0.1.0"
 edition = "2021"
 

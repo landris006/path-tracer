@@ -1326,6 +1326,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
 
 [[package]]
+name = "pathtracer"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "cgmath",
+ "egui",
+ "egui_wgpu_backend",
+ "egui_winit_platform",
+ "env_logger",
+ "image",
+ "log",
+ "pollster",
+ "tobj",
+ "uuid",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
 name = "percent-encoding"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1435,25 +1454,6 @@ checksum = "5ce3fb6ad83f861aac485e76e1985cd109d9a3713802152be56c3b1f0e0658ed"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
-]
-
-[[package]]
-name = "raytracer"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "cgmath",
- "egui",
- "egui_wgpu_backend",
- "egui_winit_platform",
- "env_logger",
- "image",
- "log",
- "pollster",
- "tobj",
- "uuid",
- "wgpu",
- "winit",
 ]
 
 [[package]]
