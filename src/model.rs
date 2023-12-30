@@ -177,5 +177,13 @@ impl Triangle {
     pub fn vertices(&self) -> [[f32; 3]; 3] {
         [self.a, self.b, self.c]
     }
+
+    pub fn centroid(&self) -> [f32; 3] {
+        [
+            (self.a[0] + self.b[0] + self.c[0]) / 3.0,
+            (self.a[1] + self.b[1] + self.c[1]) / 3.0,
+            (self.a[2] + self.b[2] + self.c[2]) / 3.0,
+        ]
+    }
 }
 

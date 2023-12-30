@@ -259,8 +259,8 @@ fn hitScene(ray: Ray) -> HitRecord {
             var child1: Node = bvhNodes[contents];
             var child2: Node = bvhNodes[contents + 1u];
 
-            var distance1: f32 = hit_aabb(ray, child1);
-            var distance2: f32 = hit_aabb(ray, child2);
+            var distance1: f32 = hitAabb(ray, child1);
+            var distance2: f32 = hitAabb(ray, child2);
             if distance1 > distance2 {
                 var tempDist: f32 = distance1;
                 distance1 = distance2;
@@ -373,8 +373,8 @@ fn hitTriangle(ray: Ray, triangle: Triangle) -> HitRecord {
         vec3<f32>(0.0, 0.0, 0.0),
         vec3<f32>(0.0, 0.0, 0.0),
         false,
-        vec3<f32>(0.3, 0.4, 0.25),
-        0.0,
+        vec3<f32>(1.0, 1.0, 1.0),
+        2.0,
     );
 
     if a > -0.00001 && a < 0.00001 {
@@ -406,7 +406,10 @@ fn hitTriangle(ray: Ray, triangle: Triangle) -> HitRecord {
     hitRecord.t = t;
     hitRecord.p = ray.origin + t * ray.direction;
 
-    let outwardNormal: vec3<f32> = (triangle.an + triangle.bn + triangle.cn) / 3.0;
+    let barycentric: vec3<f32> = vec3<f32>(1.0 - u - v, u, v);
+    let normal: vec3<f32> = normalize(triangle.an * barycentric.x + triangle.bn * barycentric.y + triangle.cn * barycentric.z);
+
+    let outwardNormal: vec3<f32> = normalize(triangle.an * barycentric.x + triangle.bn * barycentric.y + triangle.cn * barycentric.z);
     hitRecord.frontFace = dot(ray.direction, outwardNormal) < 0.0;
     hitRecord.normal = select(-outwardNormal, outwardNormal, hitRecord.frontFace);
 
@@ -446,7 +449,7 @@ fn refract(dir: vec3<f32 >, normal: vec3<f32>, etaiOverEtat: f32) -> vec3<f32> {
     return rOutParallel + rOutPerp;
 }
 
-fn hit_aabb(ray: Ray, node: Node) -> f32 {
+fn hitAabb(ray: Ray, node: Node) -> f32 {
     var inverseDir: vec3<f32> = vec3<f32>(1.0) / ray.direction;
     var t1: vec3<f32> = (node.minCorner - ray.origin) * inverseDir;
     var t2: vec3<f32> = (node.maxCorner - ray.origin) * inverseDir;

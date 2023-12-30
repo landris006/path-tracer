@@ -33,7 +33,7 @@ impl Ray {
 impl Camera {
     pub fn new() -> Self {
         Self {
-            origin: Vector3::new(0.0, 0.0, -3.0),
+            origin: Vector3::new(1.0, 1.0, 4.7),
             forward: Vector3::new(0.0, 0.0, -1.0),
             right: Vector3::new(1.0, 0.0, 0.0),
             up: Vector3::new(0.0, 1.0, 0.0),
@@ -124,7 +124,7 @@ impl CameraController {
             is_pressing_up: false,
             is_pressing_down: false,
             prev_cursor_pos: None,
-            yaw: 0.0,
+            yaw: -90.0,
             pitch: 0.0,
             speed: 3.0,
         }

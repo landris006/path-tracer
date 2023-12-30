@@ -53,6 +53,7 @@ impl Bvh {
         new_bvh.update_bounds(0, triangles);
         new_bvh.subdivide(0, triangles);
 
+        new_bvh.nodes.truncate(new_bvh.nodes_used);
         new_bvh
     }
 
@@ -104,10 +105,8 @@ impl Bvh {
         let mut j = node.left_child_index + node.triangle_count - 1;
 
         while i < j {
-            if triangles[self.triangle_indices[i as usize] as usize]
-                .vertices()
-                .iter()
-                .any(|v| v[axis] < split_position)
+            if triangles[self.triangle_indices[i as usize] as usize].centroid()[axis]
+                < split_position
             {
                 i += 1;
             } else {
