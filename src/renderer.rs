@@ -1,6 +1,6 @@
 use std::{num::NonZeroU32, path::Path, time::Instant};
 
-use crate::{scene::SphereDataBuffer, texture::CubeTexture, utils};
+use crate::{model::TriangleBuffer, scene::SphereDataBuffer, texture::CubeTexture, utils};
 use wgpu::{
     util::DeviceExt, Buffer, BufferDescriptor, CommandEncoder, Device, Extent3d, Queue,
     SamplerBindingType, SurfaceConfiguration, SurfaceTexture, Texture, TextureViewDescriptor,
@@ -219,7 +219,13 @@ impl Renderer {
 
         let triangle_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Triangle Buffer"),
-            contents: bytemuck::cast_slice(&scene.triangles),
+            contents: bytemuck::cast_slice(
+                &scene
+                    .triangles
+                    .iter()
+                    .map(TriangleBuffer::from)
+                    .collect::<Vec<_>>(),
+            ),
             usage: wgpu::BufferUsages::STORAGE,
         });
         let triangle_indices_buffer =
@@ -403,7 +409,7 @@ impl Renderer {
 
         Renderer {
             settings: Settings {
-                samples_per_pixel: 4,
+                samples_per_pixel: 1,
                 depth: 32,
                 t_min: 0.0001,
                 t_max: 1000.0,

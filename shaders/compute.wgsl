@@ -53,6 +53,8 @@ struct Triangle {
   _pad4: f32,
   cn: vec3<f32>,
   _pad5: f32,
+  albedo: vec3<f32>,
+  material: f32,
 }
 
 struct Node {
@@ -234,80 +236,67 @@ fn hitScene(ray: Ray) -> HitRecord {
     }
 
 
-    // for (var i = 0u; i < 1000u; i++) {
-    //     let triangle = triangles[(triangleIndices[i])];
-    //     let objectHitRecord = hitTriangle(ray, triangle);
+    var node: Node = bvhNodes[0u];
+    var stack: array<Node, 15>;
+    var stackLocation: u32 = 0u;
+    var nearestHit: f32 = 9999.0;
 
-    //     if !objectHitRecord.hit {
-    //                 continue;
-    //     }
+    while true {
+        var contents: u32 = u32(node.leftChildIndex);
 
-    //     if !hitRecord.hit || objectHitRecord.t < hitRecord.t {
-    //         hitRecord = objectHitRecord;
-    //     }
-    // }
+        if node.triangleCount == 0u {
+            var child1: Node = bvhNodes[contents];
+            var child2: Node = bvhNodes[contents + 1u];
 
-   // var node: Node = bvhNodes[0u];
-   // var stack: array<Node, 15>;
-   // var stackLocation: u32 = 0u;
-   // var nearestHit: f32 = 9999.0;
+            var distance1: f32 = hitAabb(ray, child1);
+            var distance2: f32 = hitAabb(ray, child2);
+            if distance1 > distance2 {
+                var tempDist: f32 = distance1;
+                distance1 = distance2;
+                distance2 = tempDist;
 
-    // while true {
-    //     var contents: u32 = u32(node.leftChildIndex);
+                var tempChild: Node = child1;
+                child1 = child2;
+                child2 = tempChild;
+            }
 
-    //     if node.triangleCount == 0u {
-    //         var child1: Node = bvhNodes[contents];
-    //         var child2: Node = bvhNodes[contents + 1u];
+            if distance1 > nearestHit {
+                if stackLocation == 0u {
+                     break;
+                } else {
+                    stackLocation -= 1u;
+                    node = stack[stackLocation];
+                }
+            } else {
+                node = child1;
+                if distance2 < nearestHit {
+                    stack[stackLocation] = child2;
+                    stackLocation += 1u;
+                }
+            }
+        } else {
+            for (var i = 0u; i < node.triangleCount; i++) {
+                let triangle = triangles[(triangleIndices[i + contents])];
+                let objectHitRecord = hitTriangle(ray, triangle);
 
-    //         var distance1: f32 = hitAabb(ray, child1);
-    //         var distance2: f32 = hitAabb(ray, child2);
-    //         if distance1 > distance2 {
-    //             var tempDist: f32 = distance1;
-    //             distance1 = distance2;
-    //             distance2 = tempDist;
+                if !objectHitRecord.hit {
+                     continue;
+                }
 
-    //             var tempChild: Node = child1;
-    //             child1 = child2;
-    //             child2 = tempChild;
-    //         }
+                if !hitRecord.hit || objectHitRecord.t < hitRecord.t {
+                    hitRecord = objectHitRecord;
+                    nearestHit = hitRecord.t;
+                }
+            }
 
-    //         if distance1 > nearestHit {
-    //             if stackLocation == 0u {
-    //                 break;
-    //             } else {
-    //                 stackLocation -= 1u;
-    //                 node = stack[stackLocation];
-    //             }
-    //         } else {
-    //             node = child1;
-    //             if distance2 < nearestHit {
-    //                 stack[stackLocation] = child2;
-    //                 stackLocation += 1u;
-    //             }
-    //         }
-    //     } else {
-    //         for (var i = 0u; i < node.triangleCount; i++) {
-    //             let triangle = triangles[(triangleIndices[i + contents])];
-    //             let objectHitRecord = hitTriangle(ray, triangle);
-
-    //             if !objectHitRecord.hit {
-    //                 continue;
-    //             }
-
-    //             if !hitRecord.hit || objectHitRecord.t < hitRecord.t {
-    //                 hitRecord = objectHitRecord;
-    //                 nearestHit = hitRecord.t;
-    //             }
-    //         }
-
-    //         if stackLocation == 0u {
-    //             break;
-    //         } else {
-    //             stackLocation -= 1u;
-    //             node = stack[stackLocation];
-    //         }
-    //     }
-    // }
+            if stackLocation == 0u {
+                 break;
+            } else {
+                stackLocation -= 1u;
+                node = stack[stackLocation];
+            }
+        }
+    }
 
     return hitRecord;
 }
@@ -374,7 +363,7 @@ fn hitTriangle(ray: Ray, triangle: Triangle) -> HitRecord {
         vec3<f32>(0.0, 0.0, 0.0),
         false,
         vec3<f32>(1.0, 1.0, 1.0),
-        2.0,
+        0.0,
     );
 
     if a > -0.00001 && a < 0.00001 {

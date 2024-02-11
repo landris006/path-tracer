@@ -1,6 +1,5 @@
 use std::time::Instant;
 
-use crate::model::Model;
 use cgmath::Vector3;
 use winit::{
     dpi::PhysicalPosition,
@@ -10,6 +9,7 @@ use winit::{
 };
 
 use crate::{
+    model::{self, Model},
     renderer::Renderer,
     scene::{Camera, CameraController, Ray},
     scene::{HitRecord, Material, Scene, Sphere, SphereDescriptor},
@@ -120,12 +120,6 @@ impl App {
                 material: Material::Dielectric,
             }),
             Sphere::new(SphereDescriptor {
-                center: Vector3::new(-1.0, 0.0, -1.0),
-                radius: 0.5,
-                albedo: Vector3::new(1.0, 1.0, 1.0),
-                material: Material::Dielectric,
-            }),
-            Sphere::new(SphereDescriptor {
                 center: Vector3::new(0.0, 1.0, -1.0),
                 radius: 0.5,
                 albedo: Vector3::new(0.8, 0.3, 0.3),
@@ -148,9 +142,11 @@ impl App {
         let ui = Ui::new(&window, &device, surface_format);
 
         let model = Model::from_obj("assets/models/bunny.obj", &device, &queue).unwrap();
-        let triangles = model.meshes.into_iter().next().unwrap().triangles;
-        // triangle placeholder
-        let triangles = vec![triangles[0]];
+        let triangles: Vec<model::Triangle> = model
+            .meshes
+            .into_iter()
+            .flat_map(|m| m.triangles)
+            .collect::<Vec<_>>();
 
         let scene = Scene::new(spheres, triangles, camera);
 

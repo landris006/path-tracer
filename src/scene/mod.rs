@@ -4,16 +4,18 @@ use uuid::Uuid;
 
 mod bvh;
 mod camera;
+mod plane;
 mod sphere;
 
 pub use camera::*;
+pub use plane::*;
 pub use sphere::*;
 
 use crate::{model::Triangle, renderer::Renderer};
 
 use self::bvh::Bvh;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Material {
     Diffuse,
     Metal,
