@@ -149,6 +149,8 @@ impl App {
 
         let model = Model::from_obj("assets/models/bunny.obj", &device, &queue).unwrap();
         let triangles = model.meshes.into_iter().next().unwrap().triangles;
+        // triangle placeholder
+        let triangles = vec![triangles[0]];
 
         let scene = Scene::new(spheres, triangles, camera);
 
@@ -200,7 +202,7 @@ impl App {
                 self.renderer
                     .render_ui(ui, self.scene.camera.moved_recently());
                 self.render_camera_ui(ui);
-                self.scene.render_ui(ui, &context);
+                self.scene.render_ui(ui, &context, &mut self.renderer);
             });
     }
 
@@ -316,11 +318,13 @@ impl App {
                     .spheres
                     .retain(|s| s.label != Some("selected_sphere_gizmo".to_string()));
                 self.scene.spheres.push(gizmo);
+                self.renderer.progressive_rendering.reset_ready_samples();
             } else {
                 self.scene.selected_sphere = None;
                 self.scene
                     .spheres
                     .retain(|s| s.label != Some("selected_sphere_gizmo".to_string()));
+                self.renderer.progressive_rendering.reset_ready_samples();
             }
         }
     }

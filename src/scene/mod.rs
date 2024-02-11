@@ -1,4 +1,5 @@
 use cgmath::Vector3;
+use egui::Response;
 use uuid::Uuid;
 
 mod bvh;
@@ -8,7 +9,7 @@ mod sphere;
 pub use camera::*;
 pub use sphere::*;
 
-use crate::model::Triangle;
+use crate::{model::Triangle, renderer::Renderer};
 
 use self::bvh::Bvh;
 
@@ -39,7 +40,14 @@ impl Scene {
         }
     }
 
-    pub fn render_ui(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
+    pub fn render_ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        context: &egui::Context,
+        renderer: &mut Renderer,
+    ) {
+        let mut responses: Vec<Response> = Vec::new();
+
         ui.collapsing("Scene", |ui| {
             ui.horizontal(|ui| {
                 if ui
@@ -53,6 +61,7 @@ impl Scene {
                         albedo: Vector3::new(0.5, 0.5, 0.5),
                         material: Material::Diffuse,
                     }));
+                    renderer.progressive_rendering.reset_ready_samples();
                 }
 
                 if ui
@@ -61,6 +70,7 @@ impl Scene {
                     .clicked()
                 {
                     self.spheres.pop();
+                    renderer.progressive_rendering.reset_ready_samples();
                 }
             });
             ui.separator();
@@ -69,29 +79,39 @@ impl Scene {
                 ui.collapsing(format!("Sphere {}", i), |ui| {
                     ui.horizontal(|ui| {
                         ui.label("Center");
-                        ui.add(egui::DragValue::new(&mut sphere.center.x).speed(0.1));
-                        ui.add(egui::DragValue::new(&mut sphere.center.y).speed(0.1));
-                        ui.add(egui::DragValue::new(&mut sphere.center.z).speed(0.1));
+                        responses.extend([
+                            ui.add(egui::DragValue::new(&mut sphere.center.x).speed(0.1)),
+                            ui.add(egui::DragValue::new(&mut sphere.center.y).speed(0.1)),
+                            ui.add(egui::DragValue::new(&mut sphere.center.z).speed(0.1)),
+                        ]);
                     });
                     ui.horizontal(|ui| {
                         ui.label("Radius");
-                        ui.add(egui::DragValue::new(&mut sphere.radius).speed(0.1));
+                        responses.push(ui.add(egui::DragValue::new(&mut sphere.radius).speed(0.1)));
                     });
                     ui.horizontal(|ui| {
                         ui.label("Albedo");
-                        ui.add(egui::DragValue::new(&mut sphere.albedo.x));
-                        ui.add(egui::DragValue::new(&mut sphere.albedo.y));
-                        ui.add(egui::DragValue::new(&mut sphere.albedo.z));
+                        responses.extend([
+                            ui.add(egui::DragValue::new(&mut sphere.albedo.x)),
+                            ui.add(egui::DragValue::new(&mut sphere.albedo.y)),
+                            ui.add(egui::DragValue::new(&mut sphere.albedo.z)),
+                        ]);
 
                         let mut color: [f32; 3] = sphere.albedo.into();
-                        ui.color_edit_button_rgb(&mut color);
+                        responses.push(ui.color_edit_button_rgb(&mut color));
                         sphere.albedo = color.into();
                     });
                     ui.horizontal(|ui| {
                         ui.label("Material");
-                        ui.radio_value(&mut sphere.material, Material::Diffuse, "Diffuse");
-                        ui.radio_value(&mut sphere.material, Material::Metal, "Metal");
-                        ui.radio_value(&mut sphere.material, Material::Dielectric, "Dielectric");
+                        responses.extend([
+                            ui.radio_value(&mut sphere.material, Material::Diffuse, "Diffuse"),
+                            ui.radio_value(&mut sphere.material, Material::Metal, "Metal"),
+                            ui.radio_value(
+                                &mut sphere.material,
+                                Material::Dielectric,
+                                "Dielectric",
+                            ),
+                        ]);
                     });
                 });
             }
@@ -105,36 +125,47 @@ impl Scene {
                     .show(context, |ui| {
                         ui.horizontal(|ui| {
                             ui.label("Center");
-                            ui.add(egui::DragValue::new(&mut sphere.center.x).speed(0.1));
-                            ui.add(egui::DragValue::new(&mut sphere.center.y).speed(0.1));
-                            ui.add(egui::DragValue::new(&mut sphere.center.z).speed(0.1));
+                            responses.extend([
+                                ui.add(egui::DragValue::new(&mut sphere.center.x).speed(0.1)),
+                                ui.add(egui::DragValue::new(&mut sphere.center.y).speed(0.1)),
+                                ui.add(egui::DragValue::new(&mut sphere.center.z).speed(0.1)),
+                            ]);
                         });
                         ui.horizontal(|ui| {
                             ui.label("Radius");
-                            ui.add(egui::DragValue::new(&mut sphere.radius).speed(0.1));
+                            responses
+                                .push(ui.add(egui::DragValue::new(&mut sphere.radius).speed(0.1)));
                         });
                         ui.horizontal(|ui| {
                             ui.label("Albedo");
-                            ui.add(egui::DragValue::new(&mut sphere.albedo.x));
-                            ui.add(egui::DragValue::new(&mut sphere.albedo.y));
-                            ui.add(egui::DragValue::new(&mut sphere.albedo.z));
+                            responses.extend([
+                                ui.add(egui::DragValue::new(&mut sphere.albedo.x)),
+                                ui.add(egui::DragValue::new(&mut sphere.albedo.y)),
+                                ui.add(egui::DragValue::new(&mut sphere.albedo.z)),
+                            ]);
 
                             let mut color: [f32; 3] = sphere.albedo.into();
-                            ui.color_edit_button_rgb(&mut color);
+                            responses.push(ui.color_edit_button_rgb(&mut color));
                             sphere.albedo = color.into();
                         });
                         ui.horizontal(|ui| {
                             ui.label("Material");
-                            ui.radio_value(&mut sphere.material, Material::Diffuse, "Diffuse");
-                            ui.radio_value(&mut sphere.material, Material::Metal, "Metal");
-                            ui.radio_value(
-                                &mut sphere.material,
-                                Material::Dielectric,
-                                "Dielectric",
-                            );
+                            responses.extend([
+                                ui.radio_value(&mut sphere.material, Material::Diffuse, "Diffuse"),
+                                ui.radio_value(&mut sphere.material, Material::Metal, "Metal"),
+                                ui.radio_value(
+                                    &mut sphere.material,
+                                    Material::Dielectric,
+                                    "Dielectric",
+                                ),
+                            ]);
                         });
                     });
             }
+        }
+
+        if responses.iter().any(|r| r.changed()) {
+            renderer.progressive_rendering.reset_ready_samples();
         }
     }
 
@@ -164,3 +195,4 @@ impl Scene {
         Some(())
     }
 }
+

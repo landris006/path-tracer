@@ -1,10 +1,9 @@
 use std::{num::NonZeroU32, path::Path, time::Instant};
 
-use crate::{model::Model, scene::SphereDataBuffer, texture::CubeTexture, utils};
+use crate::{scene::SphereDataBuffer, texture::CubeTexture, utils};
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt},
-    Buffer, BufferDescriptor, CommandEncoder, Device, Extent3d, Queue, SamplerBindingType,
-    SurfaceConfiguration, SurfaceTexture, Texture, TextureViewDescriptor,
+    util::DeviceExt, Buffer, BufferDescriptor, CommandEncoder, Device, Extent3d, Queue,
+    SamplerBindingType, SurfaceConfiguration, SurfaceTexture, Texture, TextureViewDescriptor,
 };
 
 use crate::{scene::CameraBuffer, scene::Scene, texture, WINDOW_HEIGHT, WINDOW_WIDTH};
@@ -26,7 +25,7 @@ pub struct Renderer {
     camera_buffer: Buffer,
     sphere_data_buffer: Buffer,
 
-    progressive_rendering: ProgressiveRendering,
+    pub progressive_rendering: ProgressiveRendering,
 }
 
 impl Renderer {
@@ -605,7 +604,7 @@ struct Settings {
     t_max: f32,
 }
 
-struct ProgressiveRendering {
+pub struct ProgressiveRendering {
     enabled: bool,
     sample_size: u32,
     sample_size_while_moving: u32,
@@ -627,7 +626,7 @@ impl ProgressiveRendering {
         }
     }
 
-    fn reset_ready_samples(&mut self) {
+    pub fn reset_ready_samples(&mut self) {
         self.ready_samples = 1;
     }
 

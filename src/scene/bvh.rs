@@ -32,6 +32,14 @@ pub struct Bvh {
 
 impl Bvh {
     pub fn from_triangles(triangles: &[Triangle]) -> Self {
+        if triangles.is_empty() {
+            return Self {
+                nodes: vec![],
+                nodes_used: 0,
+                triangle_indices: vec![],
+            };
+        }
+
         let nodes = vec![Node::default(); triangles.len() * 2 - 1];
         let triangle_indices = triangles
             .iter()
