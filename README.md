@@ -47,7 +47,10 @@ cargo build --release
 ```
 
 ## Gallery
-
+![bunny](https://github.com/landris006/path-tracer/assets/92788715/fffb3be0-3318-46c0-a111-ab9db1061308)
+![cornell-2](https://github.com/landris006/path-tracer/assets/92788715/28329748-8de9-4b88-b15d-da986cd2ccd0)
+![cornell](https://github.com/landris006/path-tracer/assets/92788715/c202ea74-76f5-40c3-9be7-09a71c1e387b)
+![3-balls](https://github.com/landris006/path-tracer/assets/92788715/2aee6573-77cd-4efa-8e80-d960032b1db6)
 ![image](https://github.com/landris006/path-tracer/assets/92788715/804ac2ed-2b83-48ac-b1d0-95a4d186bac2)
 ![image](https://github.com/landris006/path-tracer/assets/92788715/7e3d4df4-8721-4317-ac11-88ad56bb89b0)
 ![image](https://github.com/landris006/path-tracer/assets/92788715/22e250aa-ca1c-433d-adf6-8841d4fdcd0a)
