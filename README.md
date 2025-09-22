@@ -2,31 +2,29 @@
 
 ## Summary
 
-A real-time 3D path tracing engine, running on the GPU, built with
+A real-time 3D path tracing engine. Built with
 [Rust](https://www.rust-lang.org/) and [wgpu](https://wgpu.rs/).
 
 ### Features
 
 - flying camera to move around
 - progressive rendering (If you stand still the engine will start to accumulate
-  previous frames over time and average the pixels together, thus greatly
-  reducing noise.)
-- converting equirectangular HDRIs to cubemaps (which can then be used for the
-  skybox)
-- storing polygons in a [Bounding Volume Hierarchy](https://en.wikipedia.org/wiki/Bounding_volume_hierarchy), so they can be traversed in logarithmic time
+  previous frames over time and average the pixels together. This is a form of noise reduction.)
+- convert equirectangular HDRIs to cubemaps (useful for rendering the sky)
+- [Bounding Volume Hierarchy](https://en.wikipedia.org/wiki/Bounding_volume_hierarchy) for traversing meshes in logarithmic time
 - user interface for making changes at runtime, such as:
   - adjusting the renderer's settings
   - modifying the scene (adding and removing objects, modifying their
     properties, etc.)
-- selecting objects with the cursor (this currently only works for spheres, not complex meshes)
-- loading models from `.obj` files
+- select objects with the cursor (this currently only works for spheres, not complex meshes)
+- load models from `.obj` files
 
 ### Future plans
 
 - saving and loading scene data
 - implementing textures
 - implementing a denoiser(?)
-- moving the whole thing to [Vulkan](https://www.vulkan.org/), making it possible to utilize the raytracing cores on RTX GPUs
+- moving the whole thing to [Vulkan](https://www.vulkan.org/) and utilize the raytracing cores on RTX GPUs
 - [DLSS](https://www.nvidia.com/en-eu/geforce/technologies/dlss/) (??)
 
 ### Running and building
@@ -45,6 +43,9 @@ Building in release mode:
 ```
 cargo build --release
 ```
+
+## Progressive rendering demo
+https://github.com/user-attachments/assets/395f185c-1256-4ab7-8da1-8106761f9059
 
 ## Gallery
 ![bunny](https://github.com/landris006/path-tracer/assets/92788715/fffb3be0-3318-46c0-a111-ab9db1061308)
